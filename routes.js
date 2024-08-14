@@ -13,6 +13,7 @@ router.post('/reset-password', auth.resetPassword);
 router.get('/user', auth.getUserDetails);
 
 /*-------------Admin---------------------------------------------*/
+/*----Machine CRUD------*/
 router.post('/addMachine', ad.addMachineDetails);
 router.put('/updateMachine', ad.updateMachineDetails);
 router.delete('/deleteMachine/:machineId', ad.deleteMachine);
@@ -20,4 +21,21 @@ router.get('/getAllMachineDetails/:organizationId', ad.getAllMachineDetails)
 router.get('/getMachineDetails/:machineId', ad.getMachineDetails);
 router.put('/updateStatus/:machineId', ad.updateMachineStatus);
 
+/*----Users CRUD------*/
+router.post('/addUser', ad.addUser);
+router.put('/updateUser', ad.updateUser);
+router.get('/getUserDetails/:userId', ad.getUserDetails);
+router.get('/getUsersByOrganization/:organizationId', ad.getUsersByOrganization);
+router.put('/toggleUserBlock/:userId', ad.toggleUserBlock);
+router.delete('/deleteUser/:userId', ad.deleteUser);
+router.post('/addRole', ad.addRole);
+
+/*----CheckPoints CRUD------*/
+router.post('/addCheckpoint', ad.addCheckpoint);
+router.get('/getCheckpointDetails/:checkpointId', ad.getCheckpointDetails);
+router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getCheckpointsByMachineAndFrequency);
+
+/*----Submission-----*/
+router.post('/submission', ad.submission);
+router.put('/updateSubmissionMaintenance', ad.updateSubmissionMaintenance);
 module.exports=router;
