@@ -264,7 +264,6 @@ async function deleteMachine(req, res) {
 /*------------------Get All Machines Using Oraganization Id----------------------*/
 async function getAllMachineDetails(req, res) {
     const organizationId = req.params.organizationId;
-    console.log(organizationId);
 
     try {
         // Ensure required parameters are provided
@@ -296,11 +295,11 @@ async function getAllMachineDetails(req, res) {
 
             if (!machine) {
                 machine = {
-                    machineid: row.machineid, 
-                    machinename: row.machinename, 
+                    machineid: row.machineid,
+                    machinename: row.machinename,
                     location: row.location,
                     description: row.description,
-                    status: row.status, 
+                    status: row.status,
                     machineImage: null,
                     qrImage: null
                 };
@@ -346,7 +345,6 @@ async function getAllMachineDetails(req, res) {
 /*------------------Particular Machine Id----------------------*/
 async function getMachineDetails(req, res) {
     const machineId = req.params.machineId;
-    console.log(machineId);
 
     try {
         // Ensure required parameters are provided
@@ -374,17 +372,15 @@ async function getMachineDetails(req, res) {
 
         const machine = result.rows.map(row => {
             let machine = {
-                machineid: row.machineid, 
-                machinename: row.machinename, 
+                machineid: row.machineid,
+                machinename: row.machinename,
                 location: row.location,
                 description: row.description,
-                status: row.status, 
+                status: row.status,
                 machineImage: null,
                 qrImage: null
             };
 
-            // Read machine image and convert to base64 if available
-            console.log(row.imagepath)
             if (row.imagepath) {
                 try {
                     const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
@@ -837,7 +833,6 @@ async function addCheckpoint(req, res) {
 
 async function getCheckpointDetails(req, res) {
     const checkpointId = req.params.checkpointId;
-    console.log(checkpointId);
 
     try {
         // Ensure required parameters are provided
@@ -898,8 +893,6 @@ async function getCheckpointDetails(req, res) {
 
 async function getCheckpointsByMachineAndFrequency(req, res) {
     const { machineId, frequency } = req.params;
-
-    console.log(`Machine ID: ${machineId}, Frequency: ${frequency}`);
 
     try {
         // Ensure required parameters are provided
@@ -1021,8 +1014,6 @@ async function submission(req, res) {
             if (result.rows.length > 0) {
                 actualChecklistImageId = result.rows[0].imageid;
             }
-
-            console.log(actualChecklistImageId);
         }
 
         // Insert into checklist_submissions table
@@ -1120,14 +1111,6 @@ async function updateSubmissionMaintenance(req, res) {
             WHERE submissionid = $4;
         `;
 
-        // Log the values being used in the query for debugging
-        console.log('Updating submission with:', {
-            maintenanceStatus,
-            maintenanceRemarks,
-            maintenanceImageId,
-            submissionId
-        });
-
         await client.query(UpdateSubmissionQuery, [
             maintenanceStatus,
             maintenanceRemarks,
@@ -1152,6 +1135,339 @@ async function updateSubmissionMaintenance(req, res) {
     }
 }
 
+async function toggleAdminStatus(req, res) {
+    const { submissionId } = req.params;
+    const { action } = req.body; // `active` should be a boolean: `true` to activate, `false` to deactivate
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        const updateStatusQuery = `
+            UPDATE public.checklist_submissions
+            SET admin_action = $1
+            WHERE submissionid = $2;
+        `;
+        const result = await client.query(updateStatusQuery, [action, submissionId]);
+
+        if (result.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Submission not found' });
+        }
+
+        await client.query('COMMIT');
+        const statusMessage = action ? 'User activated successfully' : 'User deactivated successfully';
+        res.status(200).json({ message: statusMessage });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error toggling user status:', error);
+        res.status(500).json({ message: `Internal server error: ${error.message}` });
+
+    } finally {
+        client.release();
+    }
+}
+
+async function getCheckpointStatusCounts(req, res) {
+    const organizationId = req.params.organizationId;
+
+    try {
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID is required' });
+        }
+
+        // Query to get total counts and counts by frequency
+        const query = `
+            SELECT
+                COUNT(*) AS total_checkpoints,
+                COUNT(CASE 
+                    WHEN user_status = 'ok' AND maintenance_status = 'ok' AND user_status IS NOT NULL AND maintenance_status IS NOT NULL THEN 1 
+                END) AS done_checkpoints,
+                COUNT(CASE 
+                    WHEN frequency = 'Daily' THEN 1 
+                END) AS daily_count,
+                COUNT(CASE 
+                    WHEN frequency = 'Weekly' THEN 1 
+                END) AS weekly_count,
+                COUNT(CASE 
+                    WHEN frequency = 'Monthly' THEN 1 
+                END) AS monthly_count,
+                COUNT(CASE 
+                    WHEN frequency = 'Yearly' THEN 1 
+                END) AS yearly_count
+            FROM 
+                public.checklist_submissions
+            WHERE 
+                organizationid = $1
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        const row = result.rows[0];
+
+        // Split the done checkpoints by frequency
+        const doneCheckpointsByFrequency = await pool.query(`
+            SELECT
+                frequency,
+                COUNT(*) AS done_count
+            FROM
+                public.checklist_submissions
+            WHERE
+                organizationid = $1
+                AND user_status = 'ok'
+                AND maintenance_status = 'ok'
+                AND user_status IS NOT NULL
+                AND maintenance_status IS NOT NULL
+            GROUP BY
+                frequency
+        `, [organizationId]);
+
+        // Convert the done checkpoints by frequency to an object
+        const doneCounts = doneCheckpointsByFrequency.rows.reduce((acc, row) => {
+            acc[row.frequency] = parseInt(row.done_count, 10);
+            return acc;
+        }, {});
+
+        const counts = {
+            Total: {
+                total: parseInt(row.total_checkpoints, 10),
+                done: parseInt(doneCounts['Daily'] || 0, 10) +
+                    parseInt(doneCounts['Weekly'] || 0, 10) +
+                    parseInt(doneCounts['Monthly'] || 0, 10) +
+                    parseInt(doneCounts['Yearly'] || 0, 10)
+            },
+            Daily: {
+                total: parseInt(row.daily_count, 10),
+                done: parseInt(doneCounts['Daily'] || 0, 10)
+            },
+            Weekly: {
+                total: parseInt(row.weekly_count, 10),
+                done: parseInt(doneCounts['Weekly'] || 0, 10)
+            },
+            Monthly: {
+                total: parseInt(row.monthly_count, 10),
+                done: parseInt(doneCounts['Monthly'] || 0, 10)
+            },
+            Yearly: {
+                total: parseInt(row.yearly_count, 10),
+                done: parseInt(doneCounts['Yearly'] || 0, 10)
+            }
+        };
+
+        // Calculate remaining counts for each period
+        for (const period in counts) {
+            counts[period].remaining = counts[period].total - counts[period].done;
+        }
+
+        res.status(200).json(counts);
+    } catch (err) {
+        console.error('Error fetching checkpoint status counts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getMachineDailyCounts(req, res) {
+    const organizationId = req.params.organizationId;
+
+    try {
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID is required' });
+        }
+
+        // Query to get the total and done counts for daily frequency for each machine in the specified organization
+        const query = `
+            SELECT
+                m.machineid AS machineId,
+                m.machinename AS machineName,
+                COALESCE(COUNT(cs.machineid), 0) AS totalDailyCount,
+                COALESCE(COUNT(CASE 
+                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                    AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                    THEN cs.machineid 
+                END), 0) AS doneDailyCount
+            FROM
+                public.machines m
+            LEFT JOIN
+                public.checklist_submissions cs
+            ON
+                m.machineid = cs.machineid
+                AND cs.frequency = 'Daily'
+            WHERE
+                m.organizationid = $1
+            GROUP BY
+                m.machineid, m.machinename;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        // Process the results with correct conversion
+        const machineCounts = result.rows.map(row => ({
+            machineId: row.machineid,
+            machineName: row.machinename,
+            totalDailyCount: parseInt(row.totaldailycount, 10) || 0,
+            doneDailyCount: parseInt(row.donedailycount, 10) || 0,
+            remainingDailyCount: (parseInt(row.totaldailycount, 10) || 0) - (parseInt(row.donedailycount, 10) || 0)
+        }));
+
+        res.status(200).json(machineCounts);
+    } catch (err) {
+        console.error('Error fetching machine daily counts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getMachineWeeklyCounts(req, res) {
+    const organizationId = req.params.organizationId;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        // Query to get the total and done counts for Weekly frequency for each machine in the specified organization
+        const query = `
+            SELECT
+                m.machineid AS machineId,
+                m.machinename AS machineName,
+                COALESCE(COUNT(cs.machineid), 0) AS totalWeeklyCount,
+                COALESCE(COUNT(CASE 
+                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                    AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                    THEN cs.machineid 
+                END), 0) AS doneWeeklyCount
+            FROM
+                public.machines m
+            LEFT JOIN
+                public.checklist_submissions cs
+            ON
+                m.machineid = cs.machineid
+                AND cs.frequency = 'Weekly'
+            WHERE
+                m.organizationid = $1
+            GROUP BY
+                m.machineid, m.machinename;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        // Process the results with correct conversion
+        const machineCounts = result.rows.map(row => ({
+            machineId: row.machineid,
+            machineName: row.machinename,
+            totalWeeklyCount: parseInt(row.totalweeklycount, 10) || 0,
+            doneWeeklyCount: parseInt(row.doneweeklycount, 10) || 0,
+            remainingWeeklyCount: (parseInt(row.totalweeklycount, 10) || 0) - (parseInt(row.doneweeklycount, 10) || 0)
+        }));
+
+        res.status(200).json(machineCounts);
+    } catch (err) {
+        console.error('Error fetching machine weekly counts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getMachineMonthlyCounts(req, res) {
+    const organizationId = req.params.organizationId;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        // Query to get the total and done counts for Monthly frequency for each machine in the specified organization
+        const query = `
+            SELECT
+                m.machineid AS machineId,
+                m.machinename AS machineName,
+                COALESCE(COUNT(cs.machineid), 0) AS totalMonthlyCount,
+                COALESCE(COUNT(CASE 
+                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                    AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                    THEN cs.machineid 
+                END), 0) AS doneMonthlyCount
+            FROM
+                public.machines m
+            LEFT JOIN
+                public.checklist_submissions cs
+            ON
+                m.machineid = cs.machineid
+                AND cs.frequency = 'Monthly'
+            WHERE
+                m.organizationid = $1
+            GROUP BY
+                m.machineid, m.machinename;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        // Process the results with correct conversion
+        const machineCounts = result.rows.map(row => ({
+            machineId: row.machineid,
+            machineName: row.machinename,
+            totalMonthlyCount: parseInt(row.totalmonthlycount, 10) || 0,
+            doneMonthlyCount: parseInt(row.donemonthlycount, 10) || 0,
+            remainingMonthlyCount: (parseInt(row.totalmonthlycount, 10) || 0) - (parseInt(row.donemonthlycount, 10) || 0)
+        }));
+
+        res.status(200).json(machineCounts);
+    } catch (err) {
+        console.error('Error fetching machine monthly counts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getMachineYearlyCounts(req, res) {
+    const organizationId = req.params.organizationId;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        // Query to get the total and done counts for Yearly frequency for each machine in the specified organization
+        const query = `
+            SELECT
+                m.machineid AS machineId,
+                m.machinename AS machineName,
+                COALESCE(COUNT(cs.machineid), 0) AS totalYearlyCount,
+                COALESCE(COUNT(CASE 
+                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                    AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                    THEN cs.machineid 
+                END), 0) AS doneYearlyCount
+            FROM
+                public.machines m
+            LEFT JOIN
+                public.checklist_submissions cs
+            ON
+                m.machineid = cs.machineid
+                AND cs.frequency = 'Yearly'
+            WHERE
+                m.organizationid = $1
+            GROUP BY
+                m.machineid, m.machinename;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        // Process the results with correct conversion
+        const machineCounts = result.rows.map(row => ({
+            machineId: row.machineid,
+            machineName: row.machinename,
+            totalYearlyCount: parseInt(row.totalyearlycount, 10) || 0,
+            doneYearlyCount: parseInt(row.doneyearlycount, 10) || 0,
+            remainingYearlyCount: (parseInt(row.totalyearlycount, 10) || 0) - (parseInt(row.doneyearlycount, 10) || 0)
+        }));
+
+        res.status(200).json(machineCounts);
+    } catch (err) {
+        console.error('Error fetching machine yearly counts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
 
 module.exports = {
     addMachineDetails,
@@ -1171,5 +1487,11 @@ module.exports = {
     getCheckpointDetails,
     getCheckpointsByMachineAndFrequency,
     submission,
-    updateSubmissionMaintenance
+    updateSubmissionMaintenance,
+    toggleAdminStatus,
+    getCheckpointStatusCounts,
+    getMachineDailyCounts,
+    getMachineWeeklyCounts,
+    getMachineMonthlyCounts,
+    getMachineYearlyCounts
 };

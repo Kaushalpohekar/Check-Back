@@ -38,4 +38,11 @@ router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getC
 /*----Submission-----*/
 router.post('/submission', ad.submission);
 router.put('/updateSubmissionMaintenance', ad.updateSubmissionMaintenance);
+router.put('/toggleAdminStatus/:submissionId', ad.toggleAdminStatus);
+router.get('/getCheckpointStatusCounts/:organizationId', ad.getCheckpointStatusCounts);
+router.get('/getMachineDailyCounts/:organizationId', ad.getMachineDailyCounts);
+router.get('/getMachineWeeklyCounts/:organizationId', ad.getMachineWeeklyCounts);
+router.get('/getMachineMonthlyCounts/:organizationId', ad.getMachineMonthlyCounts);
+router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts);
+
 module.exports=router;
