@@ -40,10 +40,10 @@ async function register(req, res) {
         await client.query(AddOrganizationQuery, [organization_id, CompanyName, CompanyAddress]);
 
         const AddDepartmentQuery = `
-            INSERT INTO public.departments (departmentid, departmentname, organizationid) 
-            VALUES($1, $2, $3);
+            INSERT INTO public.departments (departmentid, departmentname) 
+            VALUES($1, $2);
         `;
-        await client.query(AddDepartmentQuery, [department_id, department_name, organizationid]);
+        await client.query(AddDepartmentQuery, [department_id, department_name]);
 
         const AdminUUIDQuery = `SELECT roleid FROM public.roles WHERE rolename = $1;`;
         const roleResult = await client.query(AdminUUIDQuery, [role]);
