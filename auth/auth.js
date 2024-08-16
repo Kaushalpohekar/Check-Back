@@ -86,11 +86,11 @@ async function register(req, res) {
 
 /*-------------Login-----------------*/
 async function login(req, res) {
-    const { usernameOrEmail, password } = req.body;
+    const { email, password } = req.body;
     const query = `SELECT * FROM public.users WHERE email = $1`;
 
     try {
-        const result = await db.query(query, [usernameOrEmail]);
+        const result = await db.query(query, [email]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'User does not exist!' });
