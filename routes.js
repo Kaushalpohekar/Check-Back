@@ -44,5 +44,6 @@ router.get('/getMachineDailyCounts/:organizationId', ad.getMachineDailyCounts); 
 router.get('/getMachineWeeklyCounts/:organizationId', ad.getMachineWeeklyCounts);  //done
 router.get('/getMachineMonthlyCounts/:organizationId', ad.getMachineMonthlyCounts);  //done
 router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts);  //done
+router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanceCountsByDepartment);
 
 module.exports=router;

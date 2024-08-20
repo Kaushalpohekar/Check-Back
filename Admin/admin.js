@@ -1480,6 +1480,57 @@ async function getMachineYearlyCounts(req, res) {
     }
 }
 
+async function getMaintenanceCountsByDepartment(req, res) {
+    const organizationId = req.params.organizationId;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        // SQL query to get maintenance counts for Electrical and Mechanical departments
+        const query = `
+            SELECT
+                d.departmentname AS departmentname,
+                COUNT(cs.submissionid) AS totalCount,
+                COUNT(CASE 
+                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                    THEN cs.submissionid 
+                END) AS doneCount
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.departments d
+            ON
+                cs.departmentid = d.departmentid
+            WHERE
+                d.departmentname IN ('Electrical', 'Mechanical') AND cs.organizationid = $1
+            GROUP BY
+                d.departmentname;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        // Process the results
+        const departmentCounts = result.rows.map(row => {
+            const totalCount = parseInt(row.totalcount, 10) || 0;
+            const doneCount = parseInt(row.donecount, 10) || 0;
+            return {
+                departmentName: row.departmentname,
+                totalCount: totalCount,
+                doneCount: doneCount,
+                pendingCount: totalCount - doneCount
+            };
+        });
+
+        res.status(200).json(departmentCounts);
+    } catch (err) {
+        console.error('Error fetching maintenance counts by department:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
 
 module.exports = {
     addMachineDetails,
@@ -1505,5 +1556,6 @@ module.exports = {
     getMachineDailyCounts,
     getMachineWeeklyCounts,
     getMachineMonthlyCounts,
-    getMachineYearlyCounts
+    getMachineYearlyCounts,
+    getMaintenanceCountsByDepartment
 };
