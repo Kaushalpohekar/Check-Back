@@ -20,6 +20,11 @@ async function addMachineDetails(req, res) {
         client = await pool.connect();
         await client.query('BEGIN');
 
+        // Ensure the status is a boolean
+        if (typeof status !== 'boolean') {
+            throw new Error('Status must be a boolean value');
+        }
+
         const machineInsertQuery = `
             INSERT INTO public.machines (machineid, machinename, location, description, status, organizationid)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -70,8 +75,7 @@ async function addMachineDetails(req, res) {
                 SET imagename = EXCLUDED.imagename,
                     imagepath = EXCLUDED.imagepath
             `;
-            await client.query(imageInsertQuery, [uuidv4(), machineId, `${machineId}.${imageExtension}`, imageUrl]);
-
+            await client.query(imageInsertQuery, [uuidv4(), machineId, `${machineId}.${imageExtension}`, machineImageUrl]);
         }
 
         await client.query('COMMIT');
@@ -90,6 +94,7 @@ async function addMachineDetails(req, res) {
         }
     }
 }
+
 
 
 /*------------Update Machine-----------*/
@@ -119,7 +124,7 @@ async function updateMachineDetails(req, res) {
             updateQuery += `description = $${index++}, `;
             updateValues.push(machineDescription);
         }
-        if (status) {
+        if (typeof status === 'boolean') {
             updateQuery += `status = $${index++}, `;
             updateValues.push(status);
         }
@@ -198,6 +203,7 @@ async function updateMachineDetails(req, res) {
         }
     }
 }
+
 
 
 /*------------Delete Machine-----------*/
@@ -423,8 +429,8 @@ async function updateMachineStatus(req, res) {
 
     try {
         // Ensure required parameters are provided
-        if (!machineId || (status !== 0 && status !== 1)) {
-            return res.status(400).json({ error: 'Valid Machine ID and status (0 or 1) are required' });
+        if (!machineId || typeof status !== 'boolean') {
+            return res.status(400).json({ error: 'Valid Machine ID and status (true or false) are required' });
         }
 
         const query = `
@@ -445,6 +451,7 @@ async function updateMachineStatus(req, res) {
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
 
 async function addUser(req, res) {
     const {organizationId} = req.params;
@@ -1532,6 +1539,56 @@ async function getMaintenanceCountsByDepartment(req, res) {
     }
 }
 
+async function getDetailedMaintenanceSubmissions(req, res) {
+    const organizationId = req.params.organizationId;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        // SQL query to get detailed checklist submissions with maintenance_status 'ok'
+        const query = `
+            SELECT
+                cs.submissionid,
+                d.departmentname,
+                m.machinename,
+                m."location" AS machine_location,
+                m.description AS machine_description,
+                c.checkpointname,
+                c.importantnote,
+                c.frequency,
+                cs.user_status,
+                cs.maintenance_status,
+                cs.user_remarks,
+                cs.maintenance_remarks
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.departments d
+            ON
+                cs.departmentid = d.departmentid
+            JOIN
+                public.machines m
+            ON
+                cs.machineid = m.machineid
+            JOIN
+                public.checklist c
+            ON
+                cs.checklistid = c.checkpointid
+            WHERE cs.organizationid = $1;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Error fetching detailed maintenance submissions with status "ok":', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
 
 
 module.exports = {
@@ -1559,5 +1616,6 @@ module.exports = {
     getMachineWeeklyCounts,
     getMachineMonthlyCounts,
     getMachineYearlyCounts,
-    getMaintenanceCountsByDepartment
+    getMaintenanceCountsByDepartment,
+    getDetailedMaintenanceSubmissions
 };
