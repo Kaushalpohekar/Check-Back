@@ -599,12 +599,13 @@ async function getUserDetails(req, res) {
 }
 
 async function getUsersByOrganization(req, res) {
-    const { organizationId } = req.params;
+    const { organizationId, rolename } = req.params;
 
     const client = await pool.connect();
 
     try {
-        const GetUsersQuery = `
+        // Base query
+        let GetUsersQuery = `
             SELECT 
                 u.userid, 
                 u.firstname, 
@@ -618,8 +619,18 @@ async function getUsersByOrganization(req, res) {
                 u.blocked
             FROM public.users u
             JOIN public.roles r ON u.roleid = r.roleid
-            WHERE u.organizationid = $1;
+            WHERE u.organizationid = $1
         `;
+
+        // Modify the query based on the rolename parameter
+        if (rolename === 'Admin') {
+            GetUsersQuery += ` AND r.rolename = 'Admin';`;
+        } else if (rolename === 'Standard') {
+            GetUsersQuery += ` AND r.rolename != 'Admin';`;
+        } else {
+            return res.status(400).json({ message: 'Invalid rolename provided' });
+        }
+
         const result = await client.query(GetUsersQuery, [organizationId]);
 
         if (result.rows.length === 0) {
@@ -636,6 +647,7 @@ async function getUsersByOrganization(req, res) {
         client.release();
     }
 }
+
 
 async function toggleUserBlock(req, res) {
     const { userId } = req.params;
