@@ -124,7 +124,7 @@ async function updateMachineDetails(req, res) {
             updateQuery += `description = $${index++}, `;
             updateValues.push(machineDescription);
         }
-        if (status) {
+        if (typeof status === 'boolean') {
             updateQuery += `status = $${index++}, `;
             updateValues.push(status);
         }
@@ -203,6 +203,7 @@ async function updateMachineDetails(req, res) {
         }
     }
 }
+
 
 
 /*------------Delete Machine-----------*/
