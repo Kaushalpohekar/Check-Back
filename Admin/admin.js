@@ -1512,16 +1512,18 @@ async function getMaintenanceCountsByDepartment(req, res) {
         const result = await pool.query(query, [organizationId]);
 
         // Process the results
-        const departmentCounts = result.rows.map(row => {
+        const departmentCounts = result.rows.reduce((accumulator, row) => {
             const totalCount = parseInt(row.totalcount, 10) || 0;
             const doneCount = parseInt(row.donecount, 10) || 0;
-            return {
-                departmentName: row.departmentname,
+            
+            accumulator[row.departmentname] = {
                 totalCount: totalCount,
                 doneCount: doneCount,
                 pendingCount: totalCount - doneCount
             };
-        });
+        
+            return accumulator;
+        }, {});
 
         res.status(200).json(departmentCounts);
     } catch (err) {
