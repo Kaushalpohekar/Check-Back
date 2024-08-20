@@ -5,12 +5,12 @@ const ad = require('./Admin/admin.js');
 
 
 /*-------------------Authentication----------------------------*/
-router.post('/register', auth.register);
-router.post('/login', auth.login);
+router.post('/register', auth.register);  //done
+router.post('/login', auth.login);  //done
 router.post('/forgot', auth.forgotPassword);
 router.post('/resend-forgot', auth.resendResetToken);
 router.post('/reset-password', auth.resetPassword);
-router.get('/user', auth.getUserDetails);
+router.get('/user', auth.getUserDetails);  //done
 
 /*-------------Admin---------------------------------------------*/
 /*----Machine CRUD------*/
@@ -25,9 +25,9 @@ router.put('/updateStatus/:machineId', ad.updateMachineStatus);
 router.post('/addUser', ad.addUser);
 router.put('/updateUser', ad.updateUser);
 router.get('/getUserDetails/:userId', ad.getUserDetails);
-router.get('/getUsersByOrganization/:organizationId', ad.getUsersByOrganization);
-router.put('/toggleUserBlock/:userId', ad.toggleUserBlock);
-router.delete('/deleteUser/:userId', ad.deleteUser);
+router.get('/getUsersByOrganization/:organizationId/:rolename', ad.getUsersByOrganization);  //done
+router.put('/toggleUserBlock/:userId', ad.toggleUserBlock);  //done
+router.delete('/deleteUser/:userId', ad.deleteUser);  //done
 router.post('/addRole', ad.addRole);
 
 /*----CheckPoints CRUD------*/
@@ -39,10 +39,10 @@ router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getC
 router.post('/submission', ad.submission);
 router.put('/updateSubmissionMaintenance', ad.updateSubmissionMaintenance);
 router.put('/toggleAdminStatus/:submissionId', ad.toggleAdminStatus);
-router.get('/getCheckpointStatusCounts/:organizationId', ad.getCheckpointStatusCounts);
-router.get('/getMachineDailyCounts/:organizationId', ad.getMachineDailyCounts);
-router.get('/getMachineWeeklyCounts/:organizationId', ad.getMachineWeeklyCounts);
-router.get('/getMachineMonthlyCounts/:organizationId', ad.getMachineMonthlyCounts);
-router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts);
+router.get('/getCheckpointStatusCounts/:organizationId', ad.getCheckpointStatusCounts); //done
+router.get('/getMachineDailyCounts/:organizationId', ad.getMachineDailyCounts);  //done
+router.get('/getMachineWeeklyCounts/:organizationId', ad.getMachineWeeklyCounts);  //done
+router.get('/getMachineMonthlyCounts/:organizationId', ad.getMachineMonthlyCounts);  //done
+router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts);  //done
 
 module.exports=router;
