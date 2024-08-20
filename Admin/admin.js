@@ -1532,7 +1532,7 @@ async function getMaintenanceCountsByDepartment(req, res) {
     }
 }
 
-async function getDetailedOkMaintenanceSubmissions(req, res) {
+async function getDetailedMaintenanceSubmissions(req, res) {
     const organizationId = req.params.organizationId;
 
     if (!organizationId) {
@@ -1569,8 +1569,7 @@ async function getDetailedOkMaintenanceSubmissions(req, res) {
                 public.checklist c
             ON
                 cs.checklistid = c.checkpointid
-            WHERE
-                cs.maintenance_status = 'ok' AND cs.organizationid = $1;
+            WHERE cs.organizationid = $1;
         `;
 
         const result = await pool.query(query, [organizationId]);
@@ -1582,56 +1581,6 @@ async function getDetailedOkMaintenanceSubmissions(req, res) {
     }
 }
 
-async function getDetailedNotOkMaintenanceSubmissions(req, res) {
-    const organizationId = req.params.organizationId;
-
-    if (!organizationId) {
-        return res.status(400).json({ error: 'Organization ID is required' });
-    }
-
-    try {
-        // SQL query to get detailed checklist submissions with maintenance_status not 'ok'
-        const query = `
-            SELECT
-                cs.submissionid,
-                d.departmentname,
-                m.machinename,
-                m."location" AS machine_location,
-                m.description AS machine_description,
-                c.checkpointname,
-                c.importantnote,
-                c.frequency,
-                cs.user_status,
-                cs.maintenance_status,
-                cs.user_remarks,
-                cs.maintenance_remarks
-            FROM
-                public.checklist_submissions cs
-            JOIN
-                public.departments d
-            ON
-                cs.departmentid = d.departmentid
-            JOIN
-                public.machines m
-            ON
-                cs.machineid = m.machineid
-            JOIN
-                public.checklist c
-            ON
-                cs.checklistid = c.checkpointid
-            WHERE
-                cs.maintenance_status IS DISTINCT FROM 'ok' 
-                AND cs.organizationid = $1;
-        `;
-
-        const result = await pool.query(query, [organizationId]);
-
-        res.status(200).json(result.rows);
-    } catch (err) {
-        console.error('Error fetching detailed maintenance submissions with status not "ok":', err);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-}
 
 
 
@@ -1661,6 +1610,5 @@ module.exports = {
     getMachineMonthlyCounts,
     getMachineYearlyCounts,
     getMaintenanceCountsByDepartment,
-    getDetailedOkMaintenanceSubmissions,
-    getDetailedNotOkMaintenanceSubmissions
+    getDetailedMaintenanceSubmissions
 };
