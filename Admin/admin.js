@@ -447,10 +447,10 @@ async function updateMachineStatus(req, res) {
 }
 
 async function addUser(req, res) {
+    const {organizationId} = req.params;
     const {
         FirstName,
         LastName,
-        organizationId,
         PersonalEmail,
         password,
         ContactNO,
@@ -506,8 +506,8 @@ async function addUser(req, res) {
 }
 
 async function updateUser(req, res) {
+    const {userId} = req.params;
     const {
-        userId,
         FirstName,
         LastName,
         ContactNO,
