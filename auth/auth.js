@@ -87,7 +87,6 @@ async function register(req, res) {
 /*-------------Login-----------------*/
 async function login(req, res) {
     const { usernameOrEmail, password } = req.body;
-    console.log(req.body);
     const query = `SELECT * FROM public.users WHERE email = $1`;
 
     try {
