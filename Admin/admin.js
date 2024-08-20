@@ -20,6 +20,11 @@ async function addMachineDetails(req, res) {
         client = await pool.connect();
         await client.query('BEGIN');
 
+        // Ensure the status is a boolean
+        if (typeof status !== 'boolean') {
+            throw new Error('Status must be a boolean value');
+        }
+
         const machineInsertQuery = `
             INSERT INTO public.machines (machineid, machinename, location, description, status, organizationid)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -70,8 +75,7 @@ async function addMachineDetails(req, res) {
                 SET imagename = EXCLUDED.imagename,
                     imagepath = EXCLUDED.imagepath
             `;
-            await client.query(imageInsertQuery, [uuidv4(), machineId, `${machineId}.${imageExtension}`, imageUrl]);
-
+            await client.query(imageInsertQuery, [uuidv4(), machineId, `${machineId}.${imageExtension}`, machineImageUrl]);
         }
 
         await client.query('COMMIT');
@@ -90,6 +94,7 @@ async function addMachineDetails(req, res) {
         }
     }
 }
+
 
 
 /*------------Update Machine-----------*/
@@ -423,8 +428,8 @@ async function updateMachineStatus(req, res) {
 
     try {
         // Ensure required parameters are provided
-        if (!machineId || (status !== 0 && status !== 1)) {
-            return res.status(400).json({ error: 'Valid Machine ID and status (0 or 1) are required' });
+        if (!machineId || typeof status !== 'boolean') {
+            return res.status(400).json({ error: 'Valid Machine ID and status (true or false) are required' });
         }
 
         const query = `
@@ -445,6 +450,7 @@ async function updateMachineStatus(req, res) {
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
 
 async function addUser(req, res) {
     const {
