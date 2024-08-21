@@ -8,7 +8,8 @@ const bcrypt = require('bcrypt');
 
 /*------------Add Machine-----------*/
 async function addMachineDetails(req, res) {
-    const { machineName, machineDescription, machinelocation, status, organizationId, machineImage } = req.body;
+    const { machineName, machineDescription, machinelocation, status } = req.body;
+    const {organizationId, machineImage} = req.params;
 
     const machineId = uuidv4();
     const imageId = uuidv4();
@@ -99,9 +100,8 @@ async function addMachineDetails(req, res) {
 
 /*------------Update Machine-----------*/
 async function updateMachineDetails(req, res) {
-    const { machineName, machineDescription, machinelocation, status, machineImage } = req.body;
-
-    const { machineId } = req.params;
+    const { machineName, machineDescription, machinelocation, status } = req.body;
+    const { machineId, machineImage } = req.params;
 
     let client;
 

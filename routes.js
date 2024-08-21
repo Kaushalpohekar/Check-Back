@@ -14,8 +14,8 @@ router.get('/user', auth.getUserDetails);  //done
 
 /*-------------Admin---------------------------------------------*/
 /*----Machine CRUD------*/
-router.post('/addMachine', ad.addMachineDetails);
-router.put('/updateMachine/:machineId', ad.updateMachineDetails);
+router.post('/addMachine/:organizationId/:machineImage', ad.addMachineDetails);  //done
+router.put('/updateMachine/:machineId/:machineImage', ad.updateMachineDetails);  //done
 router.delete('/deleteMachine/:machineId', ad.deleteMachine); //done
 router.get('/getAllMachineDetails/:organizationId', ad.getAllMachineDetails) //done
 router.get('/getMachineDetails/:machineId', ad.getMachineDetails);  //
