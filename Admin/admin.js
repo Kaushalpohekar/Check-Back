@@ -99,7 +99,9 @@ async function addMachineDetails(req, res) {
 
 /*------------Update Machine-----------*/
 async function updateMachineDetails(req, res) {
-    const { machineId, machineName, machineDescription, machinelocation, status, machineImage } = req.body;
+    const { machineName, machineDescription, machinelocation, status, machineImage } = req.body;
+
+    const { machineId } = req.params;
 
     let client;
 

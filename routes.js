@@ -15,16 +15,16 @@ router.get('/user', auth.getUserDetails);  //done
 /*-------------Admin---------------------------------------------*/
 /*----Machine CRUD------*/
 router.post('/addMachine', ad.addMachineDetails);
-router.put('/updateMachine', ad.updateMachineDetails);
+router.put('/updateMachine/:machineId', ad.updateMachineDetails);
 router.delete('/deleteMachine/:machineId', ad.deleteMachine); //done
 router.get('/getAllMachineDetails/:organizationId', ad.getAllMachineDetails) //done
-router.get('/getMachineDetails/:machineId', ad.getMachineDetails);
+router.get('/getMachineDetails/:machineId', ad.getMachineDetails);  //
 router.put('/updateStatus/:machineId', ad.updateMachineStatus);  //done
 
 /*----Users CRUD------*/
 router.post('/addUser/:organizationId', ad.addUser);  //done
 router.put('/updateUser/:userId', ad.updateUser);  //done
-router.get('/getUserDetails/:userId', ad.getUserDetails);
+router.get('/getUserDetails/:userId', ad.getUserDetails);  //
 router.get('/getUsersByOrganization/:organizationId/:rolename', ad.getUsersByOrganization);  //done
 router.put('/toggleUserBlock/:userId', ad.toggleUserBlock);  //done
 router.delete('/deleteUser/:userId', ad.deleteUser);  //done
