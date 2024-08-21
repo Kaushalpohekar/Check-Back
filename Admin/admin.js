@@ -95,8 +95,6 @@ async function addMachineDetails(req, res) {
     }
 }
 
-
-
 /*------------Update Machine-----------*/
 async function updateMachineDetails(req, res) {
     const { machineId, machineName, machineDescription, machinelocation, status, machineImage } = req.body;
@@ -203,8 +201,6 @@ async function updateMachineDetails(req, res) {
         }
     }
 }
-
-
 
 /*------------Delete Machine-----------*/
 async function deleteMachine(req, res) {
@@ -654,7 +650,6 @@ async function getUsersByOrganization(req, res) {
         client.release();
     }
 }
-
 
 async function toggleUserBlock(req, res) {
     const { userId } = req.params;
@@ -1547,7 +1542,7 @@ async function getDetailedMaintenanceSubmissions(req, res) {
     }
 
     try {
-        // SQL query to get detailed checklist submissions with maintenance_status 'ok'
+        // SQL query to get detailed checklist submissions with user and maintenance details
         const query = `
             SELECT
                 cs.submissionid,
@@ -1561,7 +1556,9 @@ async function getDetailedMaintenanceSubmissions(req, res) {
                 cs.user_status,
                 cs.maintenance_status,
                 cs.user_remarks,
-                cs.maintenance_remarks
+                cs.maintenance_remarks,
+                u.firstname || ' ' || u.lastname AS submitted_by,
+                cs.submission_date as date_time
             FROM
                 public.checklist_submissions cs
             JOIN
@@ -1576,6 +1573,10 @@ async function getDetailedMaintenanceSubmissions(req, res) {
                 public.checklist c
             ON
                 cs.checklistid = c.checkpointid
+            JOIN
+                public.users u
+            ON
+                cs.submittedby = u.userid
             WHERE cs.organizationid = $1;
         `;
 
@@ -1583,10 +1584,11 @@ async function getDetailedMaintenanceSubmissions(req, res) {
 
         res.status(200).json(result.rows);
     } catch (err) {
-        console.error('Error fetching detailed maintenance submissions with status "ok":', err);
+        console.error('Error fetching detailed maintenance submissions with user details:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
 
 
 
