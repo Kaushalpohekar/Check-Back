@@ -1592,7 +1592,211 @@ async function getDetailedMaintenanceSubmissions(req, res) {
 }
 
 
+async function getDetailedMaintenanceMyWorkDoneSubmissions(req, res) {
+    const organizationId = req.params.organizationId;
 
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        const query = `
+            SELECT
+                cs.submissionid,
+                d.departmentname,
+                m.machinename,
+                m."location" AS machine_location,
+                m.description AS machine_description,
+                c.checkpointname,
+                c.importantnote,
+                c.frequency,
+                cs.user_status,
+                cs.maintenance_status,
+                cs.user_remarks,
+                cs.maintenance_remarks,
+                u.firstname || ' ' || u.lastname AS submitted_by,
+                cs.submission_date as date_time,
+                ci.imagename AS checkpoint_image_name,
+                ci.imagepath AS checkpoint_image_path,
+                si.imagename AS uploaded_image_name,
+                si.imagepath AS uploaded_image_path,
+                mi.imagename AS maintenance_image_name,
+                mi.imagepath AS maintenance_image_path
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.departments d ON cs.departmentid = d.departmentid
+            JOIN
+                public.machines m ON cs.machineid = m.machineid
+            JOIN
+                public.checklist c ON cs.checklistid = c.checkpointid
+            JOIN
+                public.users u ON cs.submittedby = u.userid
+            LEFT JOIN
+                public.checklist_images ci ON cs.actual_checklist_imageid = ci.imageid
+            LEFT JOIN
+                public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
+            LEFT JOIN
+                public.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
+            WHERE
+                cs.organizationid = $1 AND cs.maintenance_status = 'ok';
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        const submissions = result.rows.map(row => {
+            const submission = {
+                submissionid: row.submissionid,
+                departmentname: row.departmentname,
+                machinename: row.machinename,
+                machine_location: row.machine_location,
+                machine_description: row.machine_description,
+                checkpointname: row.checkpointname,
+                importantnote: row.importantnote,
+                frequency: row.frequency,
+                user_status: row.user_status,
+                maintenance_status: row.maintenance_status,
+                user_remarks: row.user_remarks,
+                maintenance_remarks: row.maintenance_remarks,
+                submitted_by: row.submitted_by,
+                date_time: row.date_time,
+                checkpointImage: null,
+                uploadedImage: null,
+                maintenanceImage: null
+            };
+
+            // Convert images to base64
+            const convertImageToBase64 = (imagePath, imageName) => {
+                if (imagePath) {
+                    try {
+                        const fileBuffer = fs.readFileSync('.' + imagePath); // Use __dirname for relative paths
+                        const base64File = fileBuffer.toString('base64');
+                        const mimeType = mime.lookup(imageName);
+                        return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+                    } catch (err) {
+                        console.error(`Error reading image (${imageName}):`, err);
+                        return null;
+                    }
+                }
+                return null;
+            };
+
+            submission.checkpointImage = convertImageToBase64(row.checkpoint_image_path, row.checkpoint_image_name);
+            submission.uploadedImage = convertImageToBase64(row.uploaded_image_path, row.uploaded_image_name);
+            submission.maintenanceImage = convertImageToBase64(row.maintenance_image_path, row.maintenance_image_name);
+
+            return submission;
+        });
+
+        res.status(200).json(submissions);
+    } catch (err) {
+        console.error('Error fetching detailed maintenance submissions with user details:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getDetailedMaintenanceTodoSubmissions(req, res) {
+    const organizationId = req.params.organizationId;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        const query = `
+            SELECT
+                cs.submissionid,
+                d.departmentname,
+                m.machinename,
+                m."location" AS machine_location,
+                m.description AS machine_description,
+                c.checkpointname,
+                c.importantnote,
+                c.frequency,
+                cs.user_status,
+                cs.maintenance_status,
+                cs.user_remarks,
+                cs.maintenance_remarks,
+                u.firstname || ' ' || u.lastname AS submitted_by,
+                cs.submission_date as date_time,
+                ci.imagename AS checkpoint_image_name,
+                ci.imagepath AS checkpoint_image_path,
+                si.imagename AS uploaded_image_name,
+                si.imagepath AS uploaded_image_path,
+                mi.imagename AS maintenance_image_name,
+                mi.imagepath AS maintenance_image_path
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.departments d ON cs.departmentid = d.departmentid
+            JOIN
+                public.machines m ON cs.machineid = m.machineid
+            JOIN
+                public.checklist c ON cs.checklistid = c.checkpointid
+            JOIN
+                public.users u ON cs.submittedby = u.userid
+            LEFT JOIN
+                public.checklist_images ci ON cs.actual_checklist_imageid = ci.imageid
+            LEFT JOIN
+                public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
+            LEFT JOIN
+                public.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
+            WHERE
+                cs.organizationid = $1 AND (cs.maintenance_status IS NULL OR cs.maintenance_status <> 'ok');
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        const submissions = result.rows.map(row => {
+            const submission = {
+                submissionid: row.submissionid,
+                departmentname: row.departmentname,
+                machinename: row.machinename,
+                machine_location: row.machine_location,
+                machine_description: row.machine_description,
+                checkpointname: row.checkpointname,
+                importantnote: row.importantnote,
+                frequency: row.frequency,
+                user_status: row.user_status,
+                maintenance_status: row.maintenance_status,
+                user_remarks: row.user_remarks,
+                maintenance_remarks: row.maintenance_remarks,
+                submitted_by: row.submitted_by,
+                date_time: row.date_time,
+                checkpointImage: null,
+                uploadedImage: null,
+                maintenanceImage: null
+            };
+
+            // Convert images to base64
+            const convertImageToBase64 = (imagePath, imageName) => {
+                if (imagePath) {
+                    try {
+                        const fileBuffer = fs.readFileSync('.' + imagePath); // Use __dirname for relative paths
+                        const base64File = fileBuffer.toString('base64');
+                        const mimeType = mime.lookup(imageName);
+                        return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+                    } catch (err) {
+                        console.error(`Error reading image (${imageName}):`, err);
+                        return null;
+                    }
+                }
+                return null;
+            };
+
+            submission.checkpointImage = convertImageToBase64(row.checkpoint_image_path, row.checkpoint_image_name);
+            submission.uploadedImage = convertImageToBase64(row.uploaded_image_path, row.uploaded_image_name);
+            submission.maintenanceImage = convertImageToBase64(row.maintenance_image_path, row.maintenance_image_name);
+
+            return submission;
+        });
+
+        res.status(200).json(submissions);
+    } catch (err) {
+        console.error('Error fetching detailed maintenance submissions with user details:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
 
 
 module.exports = {
@@ -1621,5 +1825,7 @@ module.exports = {
     getMachineMonthlyCounts,
     getMachineYearlyCounts,
     getMaintenanceCountsByDepartment,
-    getDetailedMaintenanceSubmissions
+    getDetailedMaintenanceSubmissions,
+    getDetailedMaintenanceMyWorkDoneSubmissions,
+    getDetailedMaintenanceTodoSubmissions
 };

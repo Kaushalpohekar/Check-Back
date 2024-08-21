@@ -47,5 +47,7 @@ router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts)
 
 router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanceCountsByDepartment);  //done
 router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);
+router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);
+router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);
 
 module.exports=router;
