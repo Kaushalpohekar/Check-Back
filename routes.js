@@ -37,7 +37,7 @@ router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getC
 
 /*----Submission-----*/
 router.post('/submission', ad.submission);
-router.put('/updateSubmissionMaintenance', ad.updateSubmissionMaintenance);
+router.put('/submissionId/:submissionId', ad.updateSubmissionMaintenance);
 router.put('/toggleAdminStatus/:submissionId', ad.toggleAdminStatus);
 router.get('/getCheckpointStatusCounts/:organizationId', ad.getCheckpointStatusCounts); //done
 router.get('/getMachineDailyCounts/:organizationId', ad.getMachineDailyCounts);  //done
@@ -46,8 +46,8 @@ router.get('/getMachineMonthlyCounts/:organizationId', ad.getMachineMonthlyCount
 router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts);  //done
 
 router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanceCountsByDepartment);  //done
-router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);
+router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);  //done
 router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);
-router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);
+router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
 
 module.exports=router;

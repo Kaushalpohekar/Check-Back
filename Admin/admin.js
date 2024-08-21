@@ -1074,11 +1074,14 @@ async function submission(req, res) {
 
 async function updateSubmissionMaintenance(req, res) {
     const {
-        submissionId,
         maintenanceStatus,
         maintenanceRemarks,
-        maintenanceImage // Base64-encoded image
+        maintenanceImage
     } = req.body;
+
+    const{
+        submissionId,
+    } = req.params;
 
     const maintenanceImageId = uuidv4(); // Image ID for the maintenance image
 
