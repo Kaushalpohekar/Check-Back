@@ -16,14 +16,14 @@ router.get('/user', auth.getUserDetails);  //done
 /*----Machine CRUD------*/
 router.post('/addMachine', ad.addMachineDetails);
 router.put('/updateMachine', ad.updateMachineDetails);
-router.delete('/deleteMachine/:machineId', ad.deleteMachine);
-router.get('/getAllMachineDetails/:organizationId', ad.getAllMachineDetails)
+router.delete('/deleteMachine/:machineId', ad.deleteMachine); //done
+router.get('/getAllMachineDetails/:organizationId', ad.getAllMachineDetails) //done
 router.get('/getMachineDetails/:machineId', ad.getMachineDetails);
-router.put('/updateStatus/:machineId', ad.updateMachineStatus);
+router.put('/updateStatus/:machineId', ad.updateMachineStatus);  //done
 
 /*----Users CRUD------*/
-router.post('/addUser', ad.addUser);
-router.put('/updateUser', ad.updateUser);
+router.post('/addUser/:organizationId', ad.addUser);  //done
+router.put('/updateUser/:userId', ad.updateUser);  //done
 router.get('/getUserDetails/:userId', ad.getUserDetails);
 router.get('/getUsersByOrganization/:organizationId/:rolename', ad.getUsersByOrganization);  //done
 router.put('/toggleUserBlock/:userId', ad.toggleUserBlock);  //done
@@ -45,7 +45,7 @@ router.get('/getMachineWeeklyCounts/:organizationId', ad.getMachineWeeklyCounts)
 router.get('/getMachineMonthlyCounts/:organizationId', ad.getMachineMonthlyCounts);  //done
 router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts);  //done
 
-router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanceCountsByDepartment);
+router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanceCountsByDepartment);  //done
 router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);
 
 module.exports=router;
