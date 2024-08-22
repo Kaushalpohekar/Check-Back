@@ -49,5 +49,5 @@ router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanc
 router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);  //done
 router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);  //done
 router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
-
+router.get('/getStandardSubmissions/:userId', ad.getStandardSubmissions);
 module.exports=router;

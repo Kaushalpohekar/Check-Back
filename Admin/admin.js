@@ -1801,6 +1801,45 @@ async function getDetailedMaintenanceTodoSubmissions(req, res) {
     }
 }
 
+async function getStandardSubmissions(req, res) {
+    const userId = req.params.userId;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    try {
+        const query = `
+            SELECT
+                d.departmentname,
+                m.machinename,
+                c.checkpointname,
+                c.frequency,
+                cs.user_status,
+                cs.submission_date as submitted_date,
+                cs.maintenance_status,
+                cs.admin_action
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.departments d ON cs.departmentid = d.departmentid
+            JOIN
+                public.machines m ON cs.machineid = m.machineid
+            JOIN
+                public.checklist c ON cs.checklistid = c.checkpointid
+            WHERE
+                cs.submittedby = $1;
+        `;
+
+        const result = await pool.query(query, [userId]);
+
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Error fetching maintenance submissions:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
 
 module.exports = {
     addMachineDetails,
@@ -1830,5 +1869,6 @@ module.exports = {
     getMaintenanceCountsByDepartment,
     getDetailedMaintenanceSubmissions,
     getDetailedMaintenanceMyWorkDoneSubmissions,
-    getDetailedMaintenanceTodoSubmissions
+    getDetailedMaintenanceTodoSubmissions,
+    getStandardSubmissions
 };
