@@ -28,7 +28,7 @@ router.get('/getUserDetails/:userId', ad.getUserDetails);  //
 router.get('/getUsersByOrganization/:organizationId/:rolename', ad.getUsersByOrganization);  //done
 router.put('/toggleUserBlock/:userId', ad.toggleUserBlock);  //done
 router.delete('/deleteUser/:userId', ad.deleteUser);  //done
-router.post('/addRole', ad.addRole);
+router.post('/addRole', ad.addRole);  //
 
 /*----CheckPoints CRUD------*/
 router.post('/addCheckpoint', ad.addCheckpoint);
@@ -47,7 +47,7 @@ router.get('/getMachineYearlyCounts/:organizationId', ad.getMachineYearlyCounts)
 
 router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanceCountsByDepartment);  //done
 router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);  //done
-router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);
+router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);  //done
 router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
 
 module.exports=router;
