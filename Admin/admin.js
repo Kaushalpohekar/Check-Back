@@ -939,6 +939,7 @@ async function getCheckpointsByMachine(req, res) {
                 checkpointname: row.checkpointname,
                 importantnote: row.importantnote,
                 frequency: row.frequency,
+                date: row.created_at,
                 checkpointImage: null
             };
 
