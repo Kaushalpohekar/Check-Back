@@ -919,7 +919,7 @@ async function getCheckpointsByMachine(req, res) {
         const query = `
             SELECT 
                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
-                ci.imagename, ci.imagepath
+                ci.imagename, ci.imagepath, ci.created_at
             FROM 
                 public.checklist c
                 LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
