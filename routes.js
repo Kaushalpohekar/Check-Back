@@ -33,7 +33,7 @@ router.post('/addRole', ad.addRole);  //
 /*----CheckPoints CRUD------*/
 router.post('/addCheckpoint', ad.addCheckpoint);
 router.get('/getCheckpointDetails/:checkpointId', ad.getCheckpointDetails);
-router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getCheckpointsByMachineAndFrequency);
+router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getCheckpointsByMachineAndFrequency);  //done
 
 /*----Submission-----*/
 router.post('/submission', ad.submission);
