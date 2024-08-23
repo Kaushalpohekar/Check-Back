@@ -34,6 +34,7 @@ router.post('/addRole', ad.addRole);  //
 router.post('/addCheckpoint', ad.addCheckpoint);
 router.get('/getCheckpointDetails/:checkpointId', ad.getCheckpointDetails);
 router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getCheckpointsByMachineAndFrequency);  //done
+router.get('/getCheckpointsByMachine/:machineId', ad.getCheckpointsByMachine);
 
 /*----Submission-----*/
 router.post('/submission', ad.submission);
@@ -49,5 +50,9 @@ router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanc
 router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);  //done
 router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);  //done
 router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
-router.get('/getStandardSubmissions/:userId', ad.getStandardSubmissions);  //done
+router.get('/getStandardSubmissions/:userId', ad.getStandardSubmissions);
+router.get('/getAdminSubmissions/:organizationId', ad.getAdminSubmissions);
+router.get('/getSubmissionDetails/:submissionId', ad.getSubmissionDetails);
+
+
 module.exports=router;

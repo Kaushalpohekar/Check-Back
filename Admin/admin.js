@@ -907,6 +907,65 @@ async function getCheckpointDetails(req, res) {
     }
 }
 
+async function getCheckpointsByMachine(req, res) {
+    const { machineId } = req.params;
+
+    try {
+        // Ensure the required parameter is provided
+        if (!machineId) {
+            return res.status(400).json({ error: 'Machine ID is required' });
+        }
+
+        const query = `
+            SELECT 
+                c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
+                ci.imagename, ci.imagepath
+            FROM 
+                public.checklist c
+                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+            WHERE 
+                c.machineid = $1;
+        `;
+
+        const result = await pool.query(query, [machineId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No checkpoints available for the specified machine' });
+        }
+
+        const checkpoints = result.rows.map(row => {
+            let checkpoint = {
+                checkpointid: row.checkpointid,
+                checkpointname: row.checkpointname,
+                importantnote: row.importantnote,
+                frequency: row.frequency,
+                checkpointImage: null
+            };
+
+            // Read checkpoint image and convert to base64 if available
+            if (row.imagepath) {
+                try {
+                    const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
+                    const base64File = fileBuffer.toString('base64');
+                    const mimeType = mime.lookup(row.imagename);
+                    checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+                } catch (err) {
+                    console.error('Error reading checkpoint image:', err);
+                    checkpoint.checkpointImage = null; // Set to null if error occurs
+                }
+            }
+
+            return checkpoint;
+        });
+
+        res.status(200).json(checkpoints);
+    } catch (err) {
+        console.error('Error fetching checkpoints:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
 async function getCheckpointsByMachineAndFrequency(req, res) {
     const { machineId, frequency } = req.params;
 
@@ -1814,7 +1873,7 @@ async function getStandardSubmissions(req, res) {
                 d.departmentname,
                 m.machinename,
                 c.checkpointname,
-                c.frequency,
+                cs.frequency,
                 cs.user_status,
                 cs.submission_date as submitted_date,
                 cs.maintenance_status,
@@ -1840,6 +1899,132 @@ async function getStandardSubmissions(req, res) {
     }
 }
 
+async function getAdminSubmissions(req, res) {
+    const { organizationId } = req.params;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        const query = `
+            SELECT
+                d.departmentname,
+                m.machinename,
+                c.checkpointname,
+                cs.frequency,
+                cs.user_status,
+                cs.submission_date AS submitted_date,
+                cs.maintenance_status,
+                cs.admin_action,
+                CONCAT(u.firstname, ' ', u.lastname) AS operator
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.departments d ON cs.departmentid = d.departmentid
+            JOIN
+                public.machines m ON cs.machineid = m.machineid
+            JOIN
+                public.checklist c ON cs.checklistid = c.checkpointid
+            JOIN
+                public.users u ON cs.submittedby = u.userid
+            WHERE
+                cs.organizationid = $1;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Error fetching maintenance submissions:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getSubmissionDetails(req, res) {
+    const submissionId = req.params.submissionId;
+
+    try {
+        if (!submissionId) {
+            return res.status(400).json({ error: 'Submission ID is required' });
+        }
+
+        const query = `
+            SELECT 
+                cs.submissionid,
+                cs.submission_date,
+                cs.user_remarks,
+                cs.maintenance_remarks,
+                cs.frequency,
+                cs.admin_action,
+                cs.user_status,
+                cs.maintenance_status,
+                cs.submittedby,
+                cs.organizationid,
+                chk.checkpointname,
+                chk.importantnote,
+                chk.frequency AS checklist_frequency,
+                m.machinename,
+                m.location AS machine_location,
+                m.description AS machine_description,
+                d.departmentid,
+                d.departmentname,
+                CONCAT(u.firstname, ' ', u.lastname) AS submitted_by_username,
+                u.email AS submitted_by_email,
+                aci.imagename AS actual_checklist_imagename, 
+                aci.imagepath AS actual_checklist_imagepath,
+                uci.imagename AS uploaded_checklist_imagename, 
+                uci.imagepath AS uploaded_checklist_imagepath,
+                mi.imagename AS maintenance_imagename, 
+                mi.imagepath AS maintenance_imagepath
+            FROM 
+                checklist_submissions cs
+            LEFT JOIN checklist chk ON cs.checklistid = chk.checkpointid
+            LEFT JOIN machines m ON cs.machineid = m.machineid
+            LEFT JOIN departments d ON chk.departmentid = d.departmentid
+            LEFT JOIN users u ON cs.submittedby = u.userid
+            LEFT JOIN submission_images aci ON cs.actual_checklist_imageid = aci.imageid
+            LEFT JOIN submission_images uci ON cs.uploaded_checklist_imageid = uci.imageid
+            LEFT JOIN maintenance_images mi ON cs.maintenance_imageid = mi.imageid
+            WHERE 
+                cs.submissionid = $1;
+        `;
+
+        const result = await pool.query(query, [submissionId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No submission details available for the specified ID' });
+        }
+
+        const submissionDetails = result.rows[0];
+
+        // Process and convert image paths to base64
+        const convertImageToBase64 = (imagePath, imageName) => {
+            if (imagePath) {
+                try {
+                    const fileBuffer = fs.readFileSync('.' + imagePath); // Use __dirname for relative paths
+                    const base64File = fileBuffer.toString('base64');
+                    const mimeType = mime.lookup(imageName);
+                    return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+                } catch (err) {
+                    console.error(`Error reading image (${imageName}):`, err);
+                    return null;
+                }
+            }
+            return null;
+        };
+        // Convert images to base64 format
+        submissionDetails.actual_checklist_image = convertImageToBase64(submissionDetails.actual_checklist_imagepath, submissionDetails.actual_checklist_imagename);
+        submissionDetails.uploaded_checklist_image = convertImageToBase64(submissionDetails.uploaded_checklist_imagepath, submissionDetails.uploaded_checklist_imagename);
+        submissionDetails.maintenance_image = convertImageToBase64(submissionDetails.maintenance_imagepath, submissionDetails.maintenance_imagename);
+
+        res.status(200).json(submissionDetails);
+
+    } catch (err) {
+        console.error('Error fetching submission details:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
 
 module.exports = {
     addMachineDetails,
@@ -1857,6 +2042,7 @@ module.exports = {
     addRole,
     addCheckpoint,
     getCheckpointDetails,
+    getCheckpointsByMachine,
     getCheckpointsByMachineAndFrequency,
     submission,
     updateSubmissionMaintenance,
@@ -1870,5 +2056,7 @@ module.exports = {
     getDetailedMaintenanceSubmissions,
     getDetailedMaintenanceMyWorkDoneSubmissions,
     getDetailedMaintenanceTodoSubmissions,
-    getStandardSubmissions
+    getStandardSubmissions,
+    getAdminSubmissions,
+    getSubmissionDetails
 };
