@@ -1814,7 +1814,7 @@ async function getStandardSubmissions(req, res) {
                 d.departmentname,
                 m.machinename,
                 c.checkpointname,
-                c.frequency,
+                cs.frequency,
                 cs.user_status,
                 cs.submission_date as submitted_date,
                 cs.maintenance_status,
@@ -1832,6 +1832,48 @@ async function getStandardSubmissions(req, res) {
         `;
 
         const result = await pool.query(query, [userId]);
+
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Error fetching maintenance submissions:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getAdminSubmissions(req, res) {
+    const { organizationId } = req.params;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        const query = `
+            SELECT
+                d.departmentname,
+                m.machinename,
+                c.checkpointname,
+                cs.frequency,
+                cs.user_status,
+                cs.submission_date AS submitted_date,
+                cs.maintenance_status,
+                cs.admin_action,
+                CONCAT(u.firstname, ' ', u.lastname) AS operator
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.departments d ON cs.departmentid = d.departmentid
+            JOIN
+                public.machines m ON cs.machineid = m.machineid
+            JOIN
+                public.checklist c ON cs.checklistid = c.checkpointid
+            JOIN
+                public.users u ON cs.submittedby = u.userid
+            WHERE
+                cs.organizationid = $1;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
 
         res.status(200).json(result.rows);
     } catch (err) {
@@ -1870,5 +1912,6 @@ module.exports = {
     getDetailedMaintenanceSubmissions,
     getDetailedMaintenanceMyWorkDoneSubmissions,
     getDetailedMaintenanceTodoSubmissions,
-    getStandardSubmissions
+    getStandardSubmissions,
+    getAdminSubmissions
 };

@@ -50,4 +50,6 @@ router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedM
 router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);
 router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
 router.get('/getStandardSubmissions/:userId', ad.getStandardSubmissions);
+router.get('/getAdminSubmissions/:organizationId', ad.getAdminSubmissions);
+
 module.exports=router;
