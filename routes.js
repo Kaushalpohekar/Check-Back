@@ -33,6 +33,7 @@ router.post('/addRole', ad.addRole);  //
 /*----CheckPoints CRUD------*/
 router.post('/addCheckpoint', ad.addCheckpoint);
 router.get('/getCheckpointDetails/:checkpointId', ad.getCheckpointDetails);
+router.get('/getCheckpointsByMachine/:machineId', ad.getCheckpointsByMachine);
 router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency', ad.getCheckpointsByMachineAndFrequency);
 
 /*----Submission-----*/
@@ -51,5 +52,7 @@ router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.ge
 router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
 router.get('/getStandardSubmissions/:userId', ad.getStandardSubmissions);
 router.get('/getAdminSubmissions/:organizationId', ad.getAdminSubmissions);
+router.get('/getSubmissionDetails/:submissionId', ad.getSubmissionDetails);
+
 
 module.exports=router;
