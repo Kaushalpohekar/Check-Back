@@ -2028,6 +2028,62 @@ async function getSubmissionDetails(req, res) {
     }
 }
 
+async function getAllMachine(req, res) {
+    const organizationId = req.params.organizationId;
+
+    try {
+        // Ensure required parameters are provided
+        if (!organizationId) {
+            return res.status(400).json({ error: 'Organization ID is required' });
+        }
+
+        const query = `
+            SELECT 
+                machineid, machinename
+            FROM 
+                machines
+            WHERE 
+                organizationid = $1;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No machine details available for the specified organization ID' });
+        }
+
+        // Directly return the result rows as the response
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Error fetching machine details:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+async function getAllDepartments(req, res) {
+    try {
+        const query = `
+            SELECT 
+                departmentid, departmentname
+            FROM 
+                departments;
+        `;
+
+        const result = await pool.query(query);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No departments available' });
+        }
+
+        // Directly return the result rows as the response
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Error fetching department details:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
 module.exports = {
     addMachineDetails,
     updateMachineDetails,
@@ -2060,5 +2116,7 @@ module.exports = {
     getDetailedMaintenanceTodoSubmissions,
     getStandardSubmissions,
     getAdminSubmissions,
-    getSubmissionDetails
+    getSubmissionDetails,
+    getAllMachine,
+    getAllDepartments
 };

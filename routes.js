@@ -54,5 +54,7 @@ router.get('/getStandardSubmissions/:userId', ad.getStandardSubmissions);
 router.get('/getAdminSubmissions/:organizationId', ad.getAdminSubmissions);
 router.get('/getSubmissionDetails/:submissionId', ad.getSubmissionDetails);
 
-
+/*-------------*/
+router.get('/getAllMachine/:organizationId', ad.getAllMachine);
+router.get('/getAllDepartments', ad.getAllDepartments);
 module.exports=router;
