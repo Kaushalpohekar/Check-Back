@@ -1910,6 +1910,7 @@ async function getAdminSubmissions(req, res) {
     try {
         const query = `
             SELECT
+                cs.submissionid,
                 d.departmentname,
                 m.machinename,
                 c.checkpointname,
