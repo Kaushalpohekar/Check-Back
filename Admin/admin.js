@@ -1037,7 +1037,7 @@ async function submission(req, res) {
         submittedBy,
         organizationId
     } = req.body;
-
+    console.log(req.body);
     const submissionId = uuidv4();
     const uploadedImageId = uuidv4(); // Image ID for the uploaded image
 
@@ -1131,6 +1131,7 @@ async function submission(req, res) {
         }
     }
 }
+
 
 async function updateSubmissionMaintenance(req, res) {
     const {
