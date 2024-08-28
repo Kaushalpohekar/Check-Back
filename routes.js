@@ -18,7 +18,7 @@ router.post('/addMachine/:organizationId', ad.addMachineDetails);  //done
 router.put('/updateMachine/:machineId', ad.updateMachineDetails);  //done
 router.delete('/deleteMachine/:machineId', ad.deleteMachine); //done
 router.get('/getAllMachineDetails/:organizationId', ad.getAllMachineDetails) //done
-router.get('/getMachineDetails/:machineId', ad.getMachineDetails);  //
+router.get('/getMachineDetails/:machineId', ad.getMachineDetails);  //done
 router.put('/updateStatus/:machineId', ad.updateMachineStatus);  //done
 
 /*----Users CRUD------*/
@@ -39,7 +39,7 @@ router.get('/getCheckpointsByMachine/:machineId', ad.getCheckpointsByMachine);  
 /*----Submission-----*/
 router.post('/submission', ad.submission);
 router.put('/submissionId/:submissionId', ad.updateSubmissionMaintenance);
-router.put('/toggleAdminStatus/:submissionId', ad.toggleAdminStatus);
+router.put('/toggleAdminStatus/:submissionId', ad.toggleAdminStatus);  //done
 router.get('/getCheckpointStatusCounts/:organizationId', ad.getCheckpointStatusCounts); //done
 router.get('/getMachineDailyCounts/:organizationId', ad.getMachineDailyCounts);  //done
 router.get('/getMachineWeeklyCounts/:organizationId', ad.getMachineWeeklyCounts);  //done
@@ -52,7 +52,7 @@ router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.ge
 router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
 router.get('/getStandardSubmissions/:userId', ad.getStandardSubmissions);
 router.get('/getAdminSubmissions/:organizationId', ad.getAdminSubmissions);
-router.get('/getSubmissionDetails/:submissionId', ad.getSubmissionDetails);
+router.get('/getSubmissionDetails/:submissionId', ad.getSubmissionDetails);  //done
 
 
 module.exports=router;
