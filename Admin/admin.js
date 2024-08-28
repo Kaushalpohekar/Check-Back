@@ -2083,6 +2083,32 @@ async function getAllDepartments(req, res) {
     }
 }
 
+async function getOperatorsName(req, res) {
+    const organizationId = req.params.organizationId;
+    try {
+        const query = `
+            SELECT 
+                userid, CONCAT(u.firstname, ' ', u.lastname) AS name
+            FROM 
+                users u
+            WHERE 
+                organizationid = $1
+                AND roleid NOT IN ('83745d74-cd2c-4832-8819-5f74595285e2', 'b3d036de-e44e-43d2-8bd4-dd6a0e040bc5', 'c5e201c8-5b81-459b-bd4a-1a5a31cd4542');
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No users available' });
+        }
+
+        // Directly return the result rows as the response
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('Error fetching user details:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
 
 module.exports = {
     addMachineDetails,
@@ -2118,5 +2144,6 @@ module.exports = {
     getAdminSubmissions,
     getSubmissionDetails,
     getAllMachine,
-    getAllDepartments
+    getAllDepartments,
+    getOperatorsName
 };
