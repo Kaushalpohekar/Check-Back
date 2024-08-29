@@ -32,8 +32,8 @@ async function addMachineDetails(req, res) {
         `;
         await client.query(machineInsertQuery, [machineId, machineName, machinelocation, machineDescription, status, organizationId]);
 
-        const baseUrl = 'http://localhost:4000/machine';
-        const qrUrl = `${baseUrl}?machineId=${machineId}`;
+        const baseUrl = 'https://checklist.senselive.in/#/standard/dashboard/new-inspection';
+        const qrUrl = `${baseUrl}/${machineId}`;
         const qrImagePath = path.join('qr_images', `${machineId}.png`); // Relative path
 
         if (!fs.existsSync(path.dirname(qrImagePath))) {
@@ -1037,7 +1037,7 @@ async function submission(req, res) {
         submittedBy,
         organizationId
     } = req.body;
-
+    console.log(req.body);
     const submissionId = uuidv4();
     const uploadedImageId = uuidv4(); // Image ID for the uploaded image
 
@@ -1131,6 +1131,7 @@ async function submission(req, res) {
         }
     }
 }
+
 
 async function updateSubmissionMaintenance(req, res) {
     const {
@@ -2110,6 +2111,46 @@ async function getOperatorsName(req, res) {
     }
 }
 
+async function addDepartment(req, res) {
+    const { departmentName } = req.body;
+
+    // Generate a new UUID for departmentId
+    const departmentId = uuidv4();
+
+    let client;
+
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        // Insert new department
+        const insertDepartmentQuery = `
+            INSERT INTO public.departments
+            (departmentid, departmentname)
+            VALUES ($1, $2);
+        `;
+        await client.query(insertDepartmentQuery, [
+            departmentId,
+            departmentName
+        ]);
+
+        await client.query('COMMIT');
+        res.status(201).json({ message: 'Department added successfully', departmentId });
+
+    } catch (error) {
+        if (client) {
+            await client.query('ROLLBACK');
+        }
+        console.error('Error adding department:', error);
+        res.status(500).json({ message: `Internal server error: ${error.message}` });
+
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+}
+
 module.exports = {
     addMachineDetails,
     updateMachineDetails,
@@ -2145,5 +2186,6 @@ module.exports = {
     getSubmissionDetails,
     getAllMachine,
     getAllDepartments,
-    getOperatorsName
+    getOperatorsName,
+    addDepartment
 };
