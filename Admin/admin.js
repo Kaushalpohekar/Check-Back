@@ -1025,10 +1025,116 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
     }
 }
 
+// async function submission(req, res) {
+//     const {
+//         machineId,
+//         departmentId,
+//         checkListId,
+//         userStatus,
+//         userRemarks,
+//         uploadedImage,
+//         frequency,
+//         submittedBy,
+//         organizationId
+//     } = req.body;
+//     console.log(req.body);
+//     const submissionId = uuidv4();
+//     const uploadedImageId = uuidv4(); // Image ID for the uploaded image
+
+//     let client;
+
+//     try {
+//         client = await pool.connect();
+//         await client.query('BEGIN');
+
+//         // Process and save the uploaded image if provided
+//         let uploadedImageUrl = null;
+//         if (uploadedImage) {
+//             const base64Data = uploadedImage.split(';base64,').pop();
+//             const mimeType = uploadedImage.split(';')[0].split('/')[1];
+//             const validMimeTypes = ['jpeg', 'jpg', 'png', 'gif'];
+
+//             if (!validMimeTypes.includes(mimeType)) {
+//                 throw new Error('Unsupported image format');
+//             }
+
+//             const imageExtension = mimeType === 'jpeg' ? 'jpg' : mimeType;
+//             const imagePath = path.join('submission_images', `${uploadedImageId}.${imageExtension}`); // Relative path
+
+//             if (!fs.existsSync(path.dirname(imagePath))) {
+//                 fs.mkdirSync(path.dirname(imagePath), { recursive: true });
+//             }
+
+//             fs.writeFileSync(imagePath, base64Data, 'base64');
+
+//             uploadedImageUrl = `/submission_images/${uploadedImageId}.${imageExtension}`; // URL for accessing the image
+
+//             // Insert uploaded image information
+//             const InsertSubmissionImageQuery = `
+//                 INSERT INTO public.submission_images
+//                 (imageid, imagename, imagepath)
+//                 VALUES ($1, $2, $3);
+//             `;
+//             await client.query(InsertSubmissionImageQuery, [uploadedImageId, `${uploadedImageId}.${imageExtension}`, uploadedImageUrl]);
+//         }
+
+//         // Determine actual_checklist_imageid if checkpointId is provided
+//         let actualChecklistImageId = null;
+//         if (checkListId) {
+//             const CheckpointImageQuery = `
+//                 SELECT imageid
+//                 FROM public.checklist_images
+//                 WHERE checkpointid = $1;
+//             `;
+//             const result = await client.query(CheckpointImageQuery, [checkListId]);
+//             if (result.rows.length > 0) {
+//                 actualChecklistImageId = result.rows[0].imageid;
+//             }
+//         }
+
+//         // Insert into checklist_submissions table
+//         const InsertSubmissionQuery = `
+//             INSERT INTO public.checklist_submissions
+//             (submissionid, departmentid, machineid, submission_date, checklistid, user_remarks,
+//             actual_checklist_imageid, uploaded_checklist_imageid, maintenance_remarks, maintenance_imageid,
+//             frequency, admin_action, submittedby, organizationid, user_status, maintenance_status)
+//             VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, NULL, NULL, $8, FALSE, $9, $10, $11, $12);
+//         `;
+//         await client.query(InsertSubmissionQuery, [
+//             submissionId,
+//             departmentId,
+//             machineId,
+//             checkListId,
+//             userRemarks,
+//             actualChecklistImageId, // Set actualChecklistImageId
+//             uploadedImageId,
+//             frequency,
+//             submittedBy,
+//             organizationId,
+//             userStatus,
+//             null // maintenance_status is set to NULL by default
+//         ]);
+
+//         await client.query('COMMIT');
+//         res.status(201).json({ message: 'Submission added successfully', submissionId });
+
+//     } catch (error) {
+//         if (client) {
+//             await client.query('ROLLBACK');
+//         }
+//         console.error('Error adding submission:', error);
+//         res.status(500).json({ message: `Internal server error: ${error.message}` });
+
+//     } finally {
+//         if (client) {
+//             client.release();
+//         }
+//     }
+// }
 async function submission(req, res) {
     const {
         machineId,
-        departmentId,
+        departmentId, // Might be empty or not present
         checkListId,
         userStatus,
         userRemarks,
@@ -1037,9 +1143,14 @@ async function submission(req, res) {
         submittedBy,
         organizationId
     } = req.body;
+
     console.log(req.body);
     const submissionId = uuidv4();
-    const uploadedImageId = uuidv4(); // Image ID for the uploaded image
+    const uploadedImageId = uploadedImage ? uuidv4() : null; // Only generate an ID if an image is provided
+
+    // Set default departmentId if it's not provided
+    const defaultDepartmentId = 'b1939a2f-bdcf-45ac-9f04-1eb631a0d1e8'; // Replace with your default ID
+    const actualDepartmentId = departmentId || defaultDepartmentId;
 
     let client;
 
@@ -1102,12 +1213,12 @@ async function submission(req, res) {
         `;
         await client.query(InsertSubmissionQuery, [
             submissionId,
-            departmentId,
+            actualDepartmentId, // Use actualDepartmentId here
             machineId,
             checkListId,
             userRemarks,
             actualChecklistImageId, // Set actualChecklistImageId
-            uploadedImageId,
+            uploadedImageId, // Insert only if an image was uploaded
             frequency,
             submittedBy,
             organizationId,
@@ -1131,6 +1242,8 @@ async function submission(req, res) {
         }
     }
 }
+
+
 
 
 async function updateSubmissionMaintenance(req, res) {
@@ -2151,6 +2264,65 @@ async function addDepartment(req, res) {
     }
 }
 
+
+async function getMachineCounts(req, res) {
+    const organizationId = req.params.organizationId;
+    const frequency = req.params.frequency;
+
+    const validFrequencies = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    if (!validFrequencies.includes(frequency)) {
+        return res.status(400).json({ error: 'Invalid frequency' });
+    }
+
+    try {
+        // Query to get the total and done counts for the specified frequency for each machine in the specified organization
+        const query = `
+            SELECT
+                m.machineid AS machineId,
+                m.machinename AS machineName,
+                COALESCE(COUNT(cs.machineid), 0) AS total${frequency}Count,
+                COALESCE(COUNT(CASE 
+                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                    AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                    THEN cs.machineid 
+                END), 0) AS done${frequency}Count
+            FROM
+                public.machines m
+            LEFT JOIN
+                public.checklist_submissions cs
+            ON
+                m.machineid = cs.machineid
+                AND cs.frequency = $2
+            WHERE
+                m.organizationid = $1
+            GROUP BY
+                m.machineid, m.machinename;
+        `;
+
+        const result = await pool.query(query, [organizationId, frequency]);
+
+        // Process the results with correct conversion
+        const machineCounts = result.rows.map(row => ({
+            machineId: row.machineid,
+            machineName: row.machinename,
+            totalCount: parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0,
+            doneCount: parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0,
+            remainingCount: (parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0) - (parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0)
+        }));
+
+        res.status(200).json(machineCounts);
+    } catch (err) {
+        console.error('Error fetching machine counts:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
 module.exports = {
     addMachineDetails,
     updateMachineDetails,
@@ -2187,5 +2359,6 @@ module.exports = {
     getAllMachine,
     getAllDepartments,
     getOperatorsName,
-    addDepartment
+    addDepartment,
+    getMachineCounts
 };
