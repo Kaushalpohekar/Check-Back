@@ -2324,12 +2324,25 @@ async function getMachineCounts(req, res) {
 
 const fetchLatestFillSubmissions = async (req, res) => {
     const organizationId = req.params.organizationId;
+    const status = req.params.status;
 
-    if (!organizationId) {
-        return res.status(400).json({ error: 'Organization ID is required' });
+    if (!organizationId || !status) {
+        return res.status(400).json({ error: 'Organization ID and Status are required' });
+    }
+
+    if (status !== 'completed' && status !== 'pending') {
+        return res.status(400).json({ error: 'Invalid status provided. Use "completed" or "pending".' });
     }
 
     try {
+        let statusCondition = '';
+
+        if (status === 'completed') {
+            statusCondition = `AND cs.user_status = 'ok' AND cs.maintenance_status = 'ok'`;
+        } else if (status === 'pending') {
+            statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok')`;
+        }        
+
         const query = `
             SELECT
                 si.imagename AS user_image_name,
@@ -2338,7 +2351,8 @@ const fetchLatestFillSubmissions = async (req, res) => {
                 cs.submissionid,
                 c.checkpointname,
                 cs.user_status,
-                cs.maintenance_status
+                cs.maintenance_status,
+                cs.submission_date
             FROM
                 public.checklist_submissions cs
             JOIN
@@ -2349,7 +2363,8 @@ const fetchLatestFillSubmissions = async (req, res) => {
                 public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
             WHERE
                 cs.organizationid = $1
-                AND DATE(cs.submission_date) = CURRENT_DATE;
+                AND DATE(cs.submission_date) = CURRENT_DATE
+                ${statusCondition};
         `;
 
         const result = await pool.query(query, [organizationId]);
@@ -2361,7 +2376,8 @@ const fetchLatestFillSubmissions = async (req, res) => {
                 checkpointname: row.checkpointname,
                 user_status: row.user_status,
                 maintenance_status: row.maintenance_status,
-                userImage: null
+                userImage: null,
+                submitted_date: row.submission_date
             };
 
             // Convert user image to base64

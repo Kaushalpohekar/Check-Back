@@ -60,6 +60,6 @@ router.get('/getAllMachine/:organizationId', ad.getAllMachine);
 router.get('/getAllDepartments', ad.getAllDepartments);  //done
 router.get('/getOperatorsName/:organizationId', ad.getOperatorsName);  //done
 router.post('/addDepartment', ad.addDepartment);
-router.get('/fetchLatestFillSubmissions/:organizationId', ad.fetchLatestFillSubmissions);
+router.get('/fetchLatestFillSubmissions/:organizationId/:status', ad.fetchLatestFillSubmissions);
 
 module.exports=router;
