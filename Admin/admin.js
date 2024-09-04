@@ -2322,6 +2322,70 @@ async function getMachineCounts(req, res) {
     }
 }
 
+const fetchLatestFillSubmissions = async (req, res) => {
+    const organizationId = req.params.organizationId;
+
+    if (!organizationId) {
+        return res.status(400).json({ error: 'Organization ID is required' });
+    }
+
+    try {
+        const query = `
+            SELECT
+                si.imagename AS user_image_name,
+                si.imagepath AS user_image_path,
+                m.machinename,
+                cs.submissionid,
+                c.checkpointname,
+                cs.user_status,
+                cs.maintenance_status
+            FROM
+                public.checklist_submissions cs
+            JOIN
+                public.machines m ON cs.machineid = m.machineid
+            JOIN
+                public.checklist c ON cs.checklistid = c.checkpointid
+            LEFT JOIN
+                public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
+            WHERE
+                cs.organizationid = $1
+                AND DATE(cs.submission_date) = CURRENT_DATE;
+        `;
+
+        const result = await pool.query(query, [organizationId]);
+
+        const submissions = result.rows.map(row => {
+            const submission = {
+                submissionid: row.submissionid,
+                machinename: row.machinename,
+                checkpointname: row.checkpointname,
+                user_status: row.user_status,
+                maintenance_status: row.maintenance_status,
+                userImage: null
+            };
+
+            // Convert user image to base64
+            if (row.user_image_path) {
+                try {
+                    const fileBuffer = fs.readFileSync('.' + row.user_image_path);
+                    const base64File = fileBuffer.toString('base64');
+                    const mimeType = mime.lookup(row.user_image_name);
+                    submission.userImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+                } catch (err) {
+                    console.error(`Error reading image (${row.user_image_name}):`, err);
+                }
+            }
+
+            return submission;
+        });
+
+        res.status(200).json(submissions);
+    } catch (err) {
+        console.error('Error fetching latest submissions:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 
 module.exports = {
     addMachineDetails,
@@ -2360,5 +2424,6 @@ module.exports = {
     getAllDepartments,
     getOperatorsName,
     addDepartment,
-    getMachineCounts
+    getMachineCounts,
+    fetchLatestFillSubmissions
 };
