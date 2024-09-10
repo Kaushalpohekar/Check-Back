@@ -2279,110 +2279,168 @@ async function getMachineCounts(req, res) {
         return res.status(400).json({ error: 'Invalid frequency' });
     }
 
-    if (frequency === 'Daily') {
-        try {
-            // Query to get the total and done counts for each shift (A, B, C) for each machine
-            const query = `
-                SELECT
-                    m.machineid AS machineId,
-                    m.machinename AS machineName,
-                    cs.shift,
-                    COALESCE(COUNT(cs.machineid), 0) AS totalCount,
-                    COALESCE(COUNT(CASE 
-                        WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
-                        AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
-                        THEN cs.machineid 
-                    END), 0) AS doneCount
-                FROM
-                    public.machines m
-                LEFT JOIN
-                    public.checklist_submissions cs
-                ON
-                    m.machineid = cs.machineid
-                    AND cs.frequency = 'Daily'
-                WHERE
-                    m.organizationid = $1
-                GROUP BY
-                    m.machineid, m.machinename, cs.shift
-                ORDER BY
-                    m.machineid, cs.shift;
-            `;
+    
+    try {
+        // Query to get the total and done counts for the specified frequency for each machine in the specified organization
+        const query = `
+            SELECT
+                m.machineid AS machineId,
+                m.machinename AS machineName,
+                COALESCE(COUNT(cs.machineid), 0) AS total${frequency}Count,
+                COALESCE(COUNT(CASE 
+                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                    AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                    THEN cs.machineid 
+                END), 0) AS done${frequency}Count
+            FROM
+                public.machines m
+            LEFT JOIN
+                public.checklist_submissions cs
+            ON
+                m.machineid = cs.machineid
+                AND cs.frequency = $2
+            WHERE
+                m.organizationid = $1
+            GROUP BY
+                m.machineid, m.machinename;
+        `;
 
-            const result = await pool.query(query, [organizationId]);
+        const result = await pool.query(query, [organizationId, frequency]);
 
-            // Process the results and group by shift
-            const machineCounts = result.rows.reduce((acc, row) => {
-                let machine = acc.find(m => m.machineId === row.machineid);
-                if (!machine) {
-                    machine = {
-                        machineId: row.machineid,
-                        machineName: row.machinename,
-                        A: { totalCount: 0, doneCount: 0, remainingCount: 0 },
-                        B: { totalCount: 0, doneCount: 0, remainingCount: 0 },
-                        C: { totalCount: 0, doneCount: 0, remainingCount: 0 }
-                    };
-                    acc.push(machine);
-                }
+        // Process the results with correct conversion
+        const machineCounts = result.rows.map(row => ({
+            machineId: row.machineid,
+            machineName: row.machinename,
+            totalCount: parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0,
+            doneCount: parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0,
+            remainingCount: (parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0) - (parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0)
+        }));
 
-                const shift = row.shift || 'A'; // Default to 'A' if shift is missing
-                const shiftData = machine[shift] || { totalCount: 0, doneCount: 0, remainingCount: 0 };
-                shiftData.totalCount += parseInt(row.totalcount, 10);
-                shiftData.doneCount += parseInt(row.donecount, 10);
-                shiftData.remainingCount = shiftData.totalCount - shiftData.doneCount;
-                machine[shift] = shiftData;
-
-                return acc;
-            }, []);
-
-            res.status(200).json(machineCounts);
-        } catch (err) {
-            console.error('Error fetching machine counts:', err);
-            res.status(500).json({ error: 'Internal server error' });
-        }
-    } else {
-        try {
-            // Query to get the total and done counts for the specified frequency for each machine in the specified organization
-            const query = `
-                SELECT
-                    m.machineid AS machineId,
-                    m.machinename AS machineName,
-                    COALESCE(COUNT(cs.machineid), 0) AS total${frequency}Count,
-                    COALESCE(COUNT(CASE 
-                        WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
-                        AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
-                        THEN cs.machineid 
-                    END), 0) AS done${frequency}Count
-                FROM
-                    public.machines m
-                LEFT JOIN
-                    public.checklist_submissions cs
-                ON
-                    m.machineid = cs.machineid
-                    AND cs.frequency = $2
-                WHERE
-                    m.organizationid = $1
-                GROUP BY
-                    m.machineid, m.machinename;
-            `;
-
-            const result = await pool.query(query, [organizationId, frequency]);
-
-            // Process the results with correct conversion
-            const machineCounts = result.rows.map(row => ({
-                machineId: row.machineid,
-                machineName: row.machinename,
-                totalCount: parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0,
-                doneCount: parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0,
-                remainingCount: (parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0) - (parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0)
-            }));
-
-            res.status(200).json(machineCounts);
-        } catch (err) {
-            console.error('Error fetching machine counts:', err);
-            res.status(500).json({ error: 'Internal server error' });
-        }
+        res.status(200).json(machineCounts);
+    } catch (err) {
+        console.error('Error fetching machine counts:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
+
+// async function getMachineCounts(req, res) {
+//     const organizationId = req.params.organizationId;
+//     const frequency = req.params.frequency;
+
+//     const validFrequencies = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
+
+//     if (!organizationId) {
+//         return res.status(400).json({ error: 'Organization ID is required' });
+//     }
+
+//     if (!validFrequencies.includes(frequency)) {
+//         return res.status(400).json({ error: 'Invalid frequency' });
+//     }
+
+//     if (frequency === 'Daily') {
+//         try {
+//             // Query to get the total and done counts for each shift (A, B, C) for each machine
+//             const query = `
+//                 SELECT
+//                     m.machineid AS machineId,
+//                     m.machinename AS machineName,
+//                     cs.shift,
+//                     COALESCE(COUNT(cs.machineid), 0) AS totalCount,
+//                     COALESCE(COUNT(CASE 
+//                         WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+//                         AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+//                         THEN cs.machineid 
+//                     END), 0) AS doneCount
+//                 FROM
+//                     public.machines m
+//                 LEFT JOIN
+//                     public.checklist_submissions cs
+//                 ON
+//                     m.machineid = cs.machineid
+//                     AND cs.frequency = 'Daily'
+//                 WHERE
+//                     m.organizationid = $1
+//                 GROUP BY
+//                     m.machineid, m.machinename, cs.shift
+//                 ORDER BY
+//                     m.machineid, cs.shift;
+//             `;
+
+//             const result = await pool.query(query, [organizationId]);
+
+//             // Process the results and group by shift
+//             const machineCounts = result.rows.reduce((acc, row) => {
+//                 let machine = acc.find(m => m.machineId === row.machineid);
+//                 if (!machine) {
+//                     machine = {
+//                         machineId: row.machineid,
+//                         machineName: row.machinename,
+//                         A: { totalCount: 0, doneCount: 0, remainingCount: 0 },
+//                         B: { totalCount: 0, doneCount: 0, remainingCount: 0 },
+//                         C: { totalCount: 0, doneCount: 0, remainingCount: 0 }
+//                     };
+//                     acc.push(machine);
+//                 }
+
+//                 const shift = row.shift || 'A'; // Default to 'A' if shift is missing
+//                 const shiftData = machine[shift] || { totalCount: 0, doneCount: 0, remainingCount: 0 };
+//                 shiftData.totalCount += parseInt(row.totalcount, 10);
+//                 shiftData.doneCount += parseInt(row.donecount, 10);
+//                 shiftData.remainingCount = shiftData.totalCount - shiftData.doneCount;
+//                 machine[shift] = shiftData;
+
+//                 return acc;
+//             }, []);
+
+//             res.status(200).json(machineCounts);
+//         } catch (err) {
+//             console.error('Error fetching machine counts:', err);
+//             res.status(500).json({ error: 'Internal server error' });
+//         }
+//     } else {
+//         try {
+//             // Query to get the total and done counts for the specified frequency for each machine in the specified organization
+//             const query = `
+//                 SELECT
+//                     m.machineid AS machineId,
+//                     m.machinename AS machineName,
+//                     COALESCE(COUNT(cs.machineid), 0) AS total${frequency}Count,
+//                     COALESCE(COUNT(CASE 
+//                         WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+//                         AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+//                         THEN cs.machineid 
+//                     END), 0) AS done${frequency}Count
+//                 FROM
+//                     public.machines m
+//                 LEFT JOIN
+//                     public.checklist_submissions cs
+//                 ON
+//                     m.machineid = cs.machineid
+//                     AND cs.frequency = $2
+//                 WHERE
+//                     m.organizationid = $1
+//                 GROUP BY
+//                     m.machineid, m.machinename;
+//             `;
+
+//             const result = await pool.query(query, [organizationId, frequency]);
+
+//             // Process the results with correct conversion
+//             const machineCounts = result.rows.map(row => ({
+//                 machineId: row.machineid,
+//                 machineName: row.machinename,
+//                 totalCount: parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0,
+//                 doneCount: parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0,
+//                 remainingCount: (parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0) - (parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0)
+//             }));
+
+//             res.status(200).json(machineCounts);
+//         } catch (err) {
+//             console.error('Error fetching machine counts:', err);
+//             res.status(500).json({ error: 'Internal server error' });
+//         }
+//     }
+// }
 
 const fetchLatestFillSubmissions = async (req, res) => {
     const organizationId = req.params.organizationId;
