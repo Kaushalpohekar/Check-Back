@@ -1363,6 +1363,103 @@ async function toggleAdminStatus(req, res) {
     }
 }
 
+// async function getCheckpointStatusCounts(req, res) {
+//     const organizationId = req.params.organizationId;
+
+//     try {
+//         if (!organizationId) {
+//             return res.status(400).json({ error: 'Organization ID is required' });
+//         }
+
+//         // Query to get total counts and counts by frequency
+//         const query = `
+//             SELECT
+//                 COUNT(*) AS total_checkpoints,
+//                 COUNT(CASE 
+//                     WHEN user_status = 'ok' AND maintenance_status = 'ok' AND user_status IS NOT NULL AND maintenance_status IS NOT NULL THEN 1 
+//                 END) AS done_checkpoints,
+//                 COUNT(CASE 
+//                     WHEN frequency = 'Daily' THEN 1 
+//                 END) AS daily_count,
+//                 COUNT(CASE 
+//                     WHEN frequency = 'Weekly' THEN 1 
+//                 END) AS weekly_count,
+//                 COUNT(CASE 
+//                     WHEN frequency = 'Monthly' THEN 1 
+//                 END) AS monthly_count,
+//                 COUNT(CASE 
+//                     WHEN frequency = 'Yearly' THEN 1 
+//                 END) AS yearly_count
+//             FROM 
+//                 public.checklist_submissions
+//             WHERE 
+//                 organizationid = $1
+//         `;
+
+//         const result = await pool.query(query, [organizationId]);
+
+//         const row = result.rows[0];
+
+//         // Split the done checkpoints by frequency
+//         const doneCheckpointsByFrequency = await pool.query(`
+//             SELECT
+//                 frequency,
+//                 COUNT(*) AS done_count
+//             FROM
+//                 public.checklist_submissions
+//             WHERE
+//                 organizationid = $1
+//                 AND user_status = 'ok'
+//                 AND maintenance_status = 'ok'
+//                 AND user_status IS NOT NULL
+//                 AND maintenance_status IS NOT NULL
+//             GROUP BY
+//                 frequency
+//         `, [organizationId]);
+
+//         // Convert the done checkpoints by frequency to an object
+//         const doneCounts = doneCheckpointsByFrequency.rows.reduce((acc, row) => {
+//             acc[row.frequency] = parseInt(row.done_count, 10);
+//             return acc;
+//         }, {});
+
+//         const counts = {
+//             Total: {
+//                 total: parseInt(row.total_checkpoints, 10),
+//                 done: parseInt(doneCounts['Daily'] || 0, 10) +
+//                     parseInt(doneCounts['Weekly'] || 0, 10) +
+//                     parseInt(doneCounts['Monthly'] || 0, 10) +
+//                     parseInt(doneCounts['Yearly'] || 0, 10)
+//             },
+//             Daily: {
+//                 total: parseInt(row.daily_count, 10),
+//                 done: parseInt(doneCounts['Daily'] || 0, 10)
+//             },
+//             Weekly: {
+//                 total: parseInt(row.weekly_count, 10),
+//                 done: parseInt(doneCounts['Weekly'] || 0, 10)
+//             },
+//             Monthly: {
+//                 total: parseInt(row.monthly_count, 10),
+//                 done: parseInt(doneCounts['Monthly'] || 0, 10)
+//             },
+//             Yearly: {
+//                 total: parseInt(row.yearly_count, 10),
+//                 done: parseInt(doneCounts['Yearly'] || 0, 10)
+//             }
+//         };
+
+//         // Calculate remaining counts for each period
+//         for (const period in counts) {
+//             counts[period].remaining = counts[period].total - counts[period].done;
+//         }
+
+//         res.status(200).json(counts);
+//     } catch (err) {
+//         console.error('Error fetching checkpoint status counts:', err);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// }
 async function getCheckpointStatusCounts(req, res) {
     const organizationId = req.params.organizationId;
 
@@ -1371,87 +1468,72 @@ async function getCheckpointStatusCounts(req, res) {
             return res.status(400).json({ error: 'Organization ID is required' });
         }
 
-        // Query to get total counts and counts by frequency
-        const query = `
+        // Query to get total counts by frequency
+        const totalQuery = `
             SELECT
-                COUNT(*) AS total_checkpoints,
+                frequency,
+                shift,
+                COUNT(*) AS total_count,
                 COUNT(CASE 
                     WHEN user_status = 'ok' AND maintenance_status = 'ok' AND user_status IS NOT NULL AND maintenance_status IS NOT NULL THEN 1 
-                END) AS done_checkpoints,
-                COUNT(CASE 
-                    WHEN frequency = 'Daily' THEN 1 
-                END) AS daily_count,
-                COUNT(CASE 
-                    WHEN frequency = 'Weekly' THEN 1 
-                END) AS weekly_count,
-                COUNT(CASE 
-                    WHEN frequency = 'Monthly' THEN 1 
-                END) AS monthly_count,
-                COUNT(CASE 
-                    WHEN frequency = 'Yearly' THEN 1 
-                END) AS yearly_count
+                END) AS done_count
             FROM 
                 public.checklist_submissions
             WHERE 
                 organizationid = $1
+            GROUP BY 
+                frequency, shift
         `;
 
-        const result = await pool.query(query, [organizationId]);
+        const result = await pool.query(totalQuery, [organizationId]);
 
-        const row = result.rows[0];
-
-        // Split the done checkpoints by frequency
-        const doneCheckpointsByFrequency = await pool.query(`
-            SELECT
-                frequency,
-                COUNT(*) AS done_count
-            FROM
-                public.checklist_submissions
-            WHERE
-                organizationid = $1
-                AND user_status = 'ok'
-                AND maintenance_status = 'ok'
-                AND user_status IS NOT NULL
-                AND maintenance_status IS NOT NULL
-            GROUP BY
-                frequency
-        `, [organizationId]);
-
-        // Convert the done checkpoints by frequency to an object
-        const doneCounts = doneCheckpointsByFrequency.rows.reduce((acc, row) => {
-            acc[row.frequency] = parseInt(row.done_count, 10);
-            return acc;
-        }, {});
-
+        // Initialize counts object
         const counts = {
             Total: {
-                total: parseInt(row.total_checkpoints, 10),
-                done: parseInt(doneCounts['Daily'] || 0, 10) +
-                    parseInt(doneCounts['Weekly'] || 0, 10) +
-                    parseInt(doneCounts['Monthly'] || 0, 10) +
-                    parseInt(doneCounts['Yearly'] || 0, 10)
+                total: 0,
+                done: 0,
+                remaining: 0
             },
             Daily: {
-                total: parseInt(row.daily_count, 10),
-                done: parseInt(doneCounts['Daily'] || 0, 10)
+                A: { total: 0, done: 0, remaining: 0 },
+                B: { total: 0, done: 0, remaining: 0 },
+                C: { total: 0, done: 0, remaining: 0 }
             },
-            Weekly: {
-                total: parseInt(row.weekly_count, 10),
-                done: parseInt(doneCounts['Weekly'] || 0, 10)
-            },
-            Monthly: {
-                total: parseInt(row.monthly_count, 10),
-                done: parseInt(doneCounts['Monthly'] || 0, 10)
-            },
-            Yearly: {
-                total: parseInt(row.yearly_count, 10),
-                done: parseInt(doneCounts['Yearly'] || 0, 10)
-            }
+            Weekly: { total: 0, done: 0, remaining: 0 },
+            Monthly: { total: 0, done: 0, remaining: 0 },
+            Yearly: { total: 0, done: 0, remaining: 0 }
         };
 
-        // Calculate remaining counts for each period
+        // Process result rows
+        result.rows.forEach(row => {
+            const freq = row.frequency;
+            const shift = row.shift || 'None';  // Handle cases where shift might be null or undefined
+
+            // Update counts for total
+            counts.Total.total += parseInt(row.total_count, 10);
+            counts.Total.done += parseInt(row.done_count, 10);
+
+            // Update counts by frequency and shift
+            if (freq === 'Daily') {
+                if (!counts.Daily[shift]) counts.Daily[shift] = { total: 0, done: 0, remaining: 0 };
+                counts.Daily[shift].total += parseInt(row.total_count, 10);
+                counts.Daily[shift].done += parseInt(row.done_count, 10);
+            } else {
+                counts[freq].total += parseInt(row.total_count, 10);
+                counts[freq].done += parseInt(row.done_count, 10);
+            }
+        });
+
+        // Calculate remaining counts
+        counts.Total.remaining = counts.Total.total - counts.Total.done;
         for (const period in counts) {
-            counts[period].remaining = counts[period].total - counts[period].done;
+            if (period === 'Daily') {
+                for (const shift in counts.Daily) {
+                    counts.Daily[shift].remaining = counts.Daily[shift].total - counts.Daily[shift].done;
+                }
+            } else {
+                counts[period].remaining = counts[period].total - counts[period].done;
+            }
         }
 
         res.status(200).json(counts);
@@ -2505,6 +2587,7 @@ async function getMachinesWithPendingCheckpoints(req, res) {
                 // If no submission found, return the checkpoint as pending
                 if (submissionResult.rowCount === 0) {
                     return {
+                        machineid : machine.machineid,
                         checkpointid: checkpoint.checkpointid,
                         checkpointname: checkpoint.checkpointname,
                         importantnote: checkpoint.importantnote,

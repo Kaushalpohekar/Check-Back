@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const router = require('./routes'); // Ensure this path is correct
+const router = require('./routes');
+const { startCronJobs } = require('./Cronjobs/shift');
 
 const app = express();
 const port = 4000;
@@ -22,6 +23,8 @@ app.get('/', (req, res) => {
   console.log('GET request received!');
   res.send('Server is running');
 });
+
+startCronJobs();
 
 // Start the server
 app.listen(port, () => {
