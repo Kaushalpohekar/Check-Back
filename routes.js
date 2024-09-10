@@ -61,5 +61,6 @@ router.get('/getAllDepartments', ad.getAllDepartments);  //done
 router.get('/getOperatorsName/:organizationId', ad.getOperatorsName);  //done
 router.post('/addDepartment', ad.addDepartment);
 router.get('/fetchLatestFillSubmissions/:organizationId/:status', ad.fetchLatestFillSubmissions);
+router.get('/getMachinesWithPendingCheckpoints/:organizationId/:date', ad.getMachinesWithPendingCheckpoints);
 
 module.exports=router;

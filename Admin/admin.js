@@ -9,7 +9,7 @@ const bcrypt = require('bcrypt');
 /*------------Add Machine-----------*/
 async function addMachineDetails(req, res) {
     const { machineName, machineDescription, machinelocation, status, machineImage } = req.body;
-    const {organizationId} = req.params;
+    const { organizationId } = req.params;
 
     const machineId = uuidv4();
     const imageId = uuidv4();
@@ -452,7 +452,7 @@ async function updateMachineStatus(req, res) {
 
 
 async function addUser(req, res) {
-    const {organizationId} = req.params;
+    const { organizationId } = req.params;
     const {
         FirstName,
         LastName,
@@ -511,7 +511,7 @@ async function addUser(req, res) {
 }
 
 async function updateUser(req, res) {
-    const {userId} = req.params;
+    const { userId } = req.params;
     const {
         FirstName,
         LastName,
@@ -1253,7 +1253,7 @@ async function updateSubmissionMaintenance(req, res) {
         maintenanceImage
     } = req.body;
 
-    const{
+    const {
         submissionId,
     } = req.params;
 
@@ -1696,13 +1696,13 @@ async function getMaintenanceCountsByDepartment(req, res) {
         const departmentCounts = result.rows.reduce((accumulator, row) => {
             const totalCount = parseInt(row.totalcount, 10) || 0;
             const doneCount = parseInt(row.donecount, 10) || 0;
-            
+
             accumulator[row.departmentname] = {
                 totalCount: totalCount,
                 doneCount: doneCount,
                 pendingCount: totalCount - doneCount
             };
-        
+
             return accumulator;
         }, {});
 
@@ -2341,7 +2341,7 @@ const fetchLatestFillSubmissions = async (req, res) => {
             statusCondition = `AND cs.user_status = 'ok' AND cs.maintenance_status = 'ok'`;
         } else if (status === 'pending') {
             statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok')`;
-        }        
+        }
 
         const query = `
             SELECT
@@ -2403,6 +2403,137 @@ const fetchLatestFillSubmissions = async (req, res) => {
 };
 
 
+async function getMachinesWithPendingCheckpoints(req, res) {
+    const { organizationId, date } = req.params;
+
+    if (!organizationId || !date) {
+        return res.status(400).json({ error: 'Organization ID and Date are required' });
+    }
+
+    try {
+        // Step 1: Fetch all machines for the organization
+        const machineQuery = `
+            SELECT 
+                m.machineid, 
+                m.machinename
+            FROM 
+                public.machines m
+            WHERE 
+                m.organizationid = $1;
+        `;
+        const machineResult = await pool.query(machineQuery, [organizationId]);
+        const machines = machineResult.rows;
+
+        // Convert the image to base64
+        const convertImageToBase64 = async (imagePath, imageName) => {
+            if (imagePath) {
+                try {
+                    const fileBuffer = await fs.readFile('.' + imagePath); // Use relative path
+                    const base64File = fileBuffer.toString('base64');
+                    const mimeType = mime.lookup(imageName) || 'application/octet-stream';
+                    return `data:${mimeType};base64,${base64File}`;
+                } catch (err) {
+                    console.error(`Error reading image (${imageName}):`, err);
+                    return null;
+                }
+            }
+            return null;
+        };
+
+        // Step 2: For each machine, get checkpoints and check if submissions exist
+        const machineData = await Promise.all(machines.map(async (machine) => {
+            const checkpointsQuery = `
+                SELECT 
+                    c.checkpointid, 
+                    c.checkpointname,
+                    c.importantnote,
+                    ci.imageid,
+                    ci.imagename,
+                    ci.imagepath,
+                    c.frequency
+                FROM 
+                    public.checklist c
+                LEFT JOIN 
+                    public.checklist_images ci 
+                ON 
+                    c.checkpointid = ci.checkpointid
+                WHERE 
+                    c.machineid = $1
+            `;
+            const checkpointsResult = await pool.query(checkpointsQuery, [machine.machineid]);
+            const checkpoints = checkpointsResult.rows;
+
+            // Step 3: For each checkpoint, check if a submission exists in the appropriate time range
+            const pendingCheckpoints = await Promise.all(checkpoints.map(async (checkpoint) => {
+                let interval;
+                const frequency = checkpoint.frequency ? checkpoint.frequency.toLowerCase() : 'yearly'; // Default to yearly if undefined
+
+                switch (frequency) {
+                    case 'daily':
+                        interval = '8 hours'; // Last 8 hours
+                        break;
+                    case 'weekly':
+                        interval = '1 week'; // Last week
+                        break;
+                    case 'monthly':
+                        interval = '1 month'; // Last month
+                        break;
+                    case 'yearly':
+                        interval = '1 year'; // Last year
+                        break;
+                    default:
+                        interval = '1 year'; // Default to yearly if frequency is undefined
+                }
+
+                const submissionQuery = `
+                    SELECT 
+                        1 
+                    FROM 
+                        public.checklist_submissions 
+                    WHERE 
+                        checklistid = $1 
+                        AND submission_date >= $2::timestamp - INTERVAL '${interval}'
+                        AND organizationid = $3
+                `;
+
+                const submissionResult = await pool.query(submissionQuery, [
+                    checkpoint.checkpointid,
+                    date,
+                    organizationId
+                ]);
+
+                // If no submission found, return the checkpoint as pending
+                if (submissionResult.rowCount === 0) {
+                    return {
+                        checkpointid: checkpoint.checkpointid,
+                        checkpointname: checkpoint.checkpointname,
+                        importantnote: checkpoint.importantnote,
+                        frequency: checkpoint.frequency,
+                        image: checkpoint.imagepath ? await convertImageToBase64(checkpoint.imagepath, checkpoint.imagename) : null
+                    };
+                }
+                return null; // Otherwise, checkpoint is already filled
+            }));
+
+            // Filter out any `null` values (i.e., filled checkpoints)
+            const filteredCheckpoints = pendingCheckpoints.filter(cp => cp !== null);
+
+            // Step 4: Format and return the machine data along with pending checkpoints
+            return {
+                machinename: machine.machinename,
+                checkpoints: filteredCheckpoints
+            };
+        }));
+
+        // Step 5: Send the final response
+        res.status(200).json({ data: machineData });
+    } catch (err) {
+        console.error('Error fetching machines and pending checkpoints:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
 module.exports = {
     addMachineDetails,
     updateMachineDetails,
@@ -2441,5 +2572,6 @@ module.exports = {
     getOperatorsName,
     addDepartment,
     getMachineCounts,
-    fetchLatestFillSubmissions
+    fetchLatestFillSubmissions,
+    getMachinesWithPendingCheckpoints
 };
