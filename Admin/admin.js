@@ -1363,103 +1363,6 @@ async function toggleAdminStatus(req, res) {
     }
 }
 
-// async function getCheckpointStatusCounts(req, res) {
-//     const organizationId = req.params.organizationId;
-
-//     try {
-//         if (!organizationId) {
-//             return res.status(400).json({ error: 'Organization ID is required' });
-//         }
-
-//         // Query to get total counts and counts by frequency
-//         const query = `
-//             SELECT
-//                 COUNT(*) AS total_checkpoints,
-//                 COUNT(CASE 
-//                     WHEN user_status = 'ok' AND maintenance_status = 'ok' AND user_status IS NOT NULL AND maintenance_status IS NOT NULL THEN 1 
-//                 END) AS done_checkpoints,
-//                 COUNT(CASE 
-//                     WHEN frequency = 'Daily' THEN 1 
-//                 END) AS daily_count,
-//                 COUNT(CASE 
-//                     WHEN frequency = 'Weekly' THEN 1 
-//                 END) AS weekly_count,
-//                 COUNT(CASE 
-//                     WHEN frequency = 'Monthly' THEN 1 
-//                 END) AS monthly_count,
-//                 COUNT(CASE 
-//                     WHEN frequency = 'Yearly' THEN 1 
-//                 END) AS yearly_count
-//             FROM 
-//                 public.checklist_submissions
-//             WHERE 
-//                 organizationid = $1
-//         `;
-
-//         const result = await pool.query(query, [organizationId]);
-
-//         const row = result.rows[0];
-
-//         // Split the done checkpoints by frequency
-//         const doneCheckpointsByFrequency = await pool.query(`
-//             SELECT
-//                 frequency,
-//                 COUNT(*) AS done_count
-//             FROM
-//                 public.checklist_submissions
-//             WHERE
-//                 organizationid = $1
-//                 AND user_status = 'ok'
-//                 AND maintenance_status = 'ok'
-//                 AND user_status IS NOT NULL
-//                 AND maintenance_status IS NOT NULL
-//             GROUP BY
-//                 frequency
-//         `, [organizationId]);
-
-//         // Convert the done checkpoints by frequency to an object
-//         const doneCounts = doneCheckpointsByFrequency.rows.reduce((acc, row) => {
-//             acc[row.frequency] = parseInt(row.done_count, 10);
-//             return acc;
-//         }, {});
-
-//         const counts = {
-//             Total: {
-//                 total: parseInt(row.total_checkpoints, 10),
-//                 done: parseInt(doneCounts['Daily'] || 0, 10) +
-//                     parseInt(doneCounts['Weekly'] || 0, 10) +
-//                     parseInt(doneCounts['Monthly'] || 0, 10) +
-//                     parseInt(doneCounts['Yearly'] || 0, 10)
-//             },
-//             Daily: {
-//                 total: parseInt(row.daily_count, 10),
-//                 done: parseInt(doneCounts['Daily'] || 0, 10)
-//             },
-//             Weekly: {
-//                 total: parseInt(row.weekly_count, 10),
-//                 done: parseInt(doneCounts['Weekly'] || 0, 10)
-//             },
-//             Monthly: {
-//                 total: parseInt(row.monthly_count, 10),
-//                 done: parseInt(doneCounts['Monthly'] || 0, 10)
-//             },
-//             Yearly: {
-//                 total: parseInt(row.yearly_count, 10),
-//                 done: parseInt(doneCounts['Yearly'] || 0, 10)
-//             }
-//         };
-
-//         // Calculate remaining counts for each period
-//         for (const period in counts) {
-//             counts[period].remaining = counts[period].total - counts[period].done;
-//         }
-
-//         res.status(200).json(counts);
-//     } catch (err) {
-//         console.error('Error fetching checkpoint status counts:', err);
-//         res.status(500).json({ error: 'Internal server error' });
-//     }
-// }
 async function getCheckpointStatusCounts(req, res) {
     const organizationId = req.params.organizationId;
 
@@ -1468,72 +1371,87 @@ async function getCheckpointStatusCounts(req, res) {
             return res.status(400).json({ error: 'Organization ID is required' });
         }
 
-        // Query to get total counts by frequency
-        const totalQuery = `
+        // Query to get total counts and counts by frequency
+        const query = `
             SELECT
-                frequency,
-                shift,
-                COUNT(*) AS total_count,
+                COUNT(*) AS total_checkpoints,
                 COUNT(CASE 
                     WHEN user_status = 'ok' AND maintenance_status = 'ok' AND user_status IS NOT NULL AND maintenance_status IS NOT NULL THEN 1 
-                END) AS done_count
+                END) AS done_checkpoints,
+                COUNT(CASE 
+                    WHEN frequency = 'Daily' THEN 1 
+                END) AS daily_count,
+                COUNT(CASE 
+                    WHEN frequency = 'Weekly' THEN 1 
+                END) AS weekly_count,
+                COUNT(CASE 
+                    WHEN frequency = 'Monthly' THEN 1 
+                END) AS monthly_count,
+                COUNT(CASE 
+                    WHEN frequency = 'Yearly' THEN 1 
+                END) AS yearly_count
             FROM 
                 public.checklist_submissions
             WHERE 
                 organizationid = $1
-            GROUP BY 
-                frequency, shift
         `;
 
-        const result = await pool.query(totalQuery, [organizationId]);
+        const result = await pool.query(query, [organizationId]);
 
-        // Initialize counts object
+        const row = result.rows[0];
+
+        // Split the done checkpoints by frequency
+        const doneCheckpointsByFrequency = await pool.query(`
+            SELECT
+                frequency,
+                COUNT(*) AS done_count
+            FROM
+                public.checklist_submissions
+            WHERE
+                organizationid = $1
+                AND user_status = 'ok'
+                AND maintenance_status = 'ok'
+                AND user_status IS NOT NULL
+                AND maintenance_status IS NOT NULL
+            GROUP BY
+                frequency
+        `, [organizationId]);
+
+        // Convert the done checkpoints by frequency to an object
+        const doneCounts = doneCheckpointsByFrequency.rows.reduce((acc, row) => {
+            acc[row.frequency] = parseInt(row.done_count, 10);
+            return acc;
+        }, {});
+
         const counts = {
             Total: {
-                total: 0,
-                done: 0,
-                remaining: 0
+                total: parseInt(row.total_checkpoints, 10),
+                done: parseInt(doneCounts['Daily'] || 0, 10) +
+                    parseInt(doneCounts['Weekly'] || 0, 10) +
+                    parseInt(doneCounts['Monthly'] || 0, 10) +
+                    parseInt(doneCounts['Yearly'] || 0, 10)
             },
             Daily: {
-                A: { total: 0, done: 0, remaining: 0 },
-                B: { total: 0, done: 0, remaining: 0 },
-                C: { total: 0, done: 0, remaining: 0 }
+                total: parseInt(row.daily_count, 10),
+                done: parseInt(doneCounts['Daily'] || 0, 10)
             },
-            Weekly: { total: 0, done: 0, remaining: 0 },
-            Monthly: { total: 0, done: 0, remaining: 0 },
-            Yearly: { total: 0, done: 0, remaining: 0 }
+            Weekly: {
+                total: parseInt(row.weekly_count, 10),
+                done: parseInt(doneCounts['Weekly'] || 0, 10)
+            },
+            Monthly: {
+                total: parseInt(row.monthly_count, 10),
+                done: parseInt(doneCounts['Monthly'] || 0, 10)
+            },
+            Yearly: {
+                total: parseInt(row.yearly_count, 10),
+                done: parseInt(doneCounts['Yearly'] || 0, 10)
+            }
         };
 
-        // Process result rows
-        result.rows.forEach(row => {
-            const freq = row.frequency;
-            const shift = row.shift || 'None';  // Handle cases where shift might be null or undefined
-
-            // Update counts for total
-            counts.Total.total += parseInt(row.total_count, 10);
-            counts.Total.done += parseInt(row.done_count, 10);
-
-            // Update counts by frequency and shift
-            if (freq === 'Daily') {
-                if (!counts.Daily[shift]) counts.Daily[shift] = { total: 0, done: 0, remaining: 0 };
-                counts.Daily[shift].total += parseInt(row.total_count, 10);
-                counts.Daily[shift].done += parseInt(row.done_count, 10);
-            } else {
-                counts[freq].total += parseInt(row.total_count, 10);
-                counts[freq].done += parseInt(row.done_count, 10);
-            }
-        });
-
-        // Calculate remaining counts
-        counts.Total.remaining = counts.Total.total - counts.Total.done;
+        // Calculate remaining counts for each period
         for (const period in counts) {
-            if (period === 'Daily') {
-                for (const shift in counts.Daily) {
-                    counts.Daily[shift].remaining = counts.Daily[shift].total - counts.Daily[shift].done;
-                }
-            } else {
-                counts[period].remaining = counts[period].total - counts[period].done;
-            }
+            counts[period].remaining = counts[period].total - counts[period].done;
         }
 
         res.status(200).json(counts);
@@ -2361,46 +2279,108 @@ async function getMachineCounts(req, res) {
         return res.status(400).json({ error: 'Invalid frequency' });
     }
 
-    try {
-        // Query to get the total and done counts for the specified frequency for each machine in the specified organization
-        const query = `
-            SELECT
-                m.machineid AS machineId,
-                m.machinename AS machineName,
-                COALESCE(COUNT(cs.machineid), 0) AS total${frequency}Count,
-                COALESCE(COUNT(CASE 
-                    WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
-                    AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
-                    THEN cs.machineid 
-                END), 0) AS done${frequency}Count
-            FROM
-                public.machines m
-            LEFT JOIN
-                public.checklist_submissions cs
-            ON
-                m.machineid = cs.machineid
-                AND cs.frequency = $2
-            WHERE
-                m.organizationid = $1
-            GROUP BY
-                m.machineid, m.machinename;
-        `;
+    if (frequency === 'Daily') {
+        try {
+            // Query to get the total and done counts for each shift (A, B, C) for each machine
+            const query = `
+                SELECT
+                    m.machineid AS machineId,
+                    m.machinename AS machineName,
+                    cs.shift,
+                    COALESCE(COUNT(cs.machineid), 0) AS totalCount,
+                    COALESCE(COUNT(CASE 
+                        WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                        AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                        THEN cs.machineid 
+                    END), 0) AS doneCount
+                FROM
+                    public.machines m
+                LEFT JOIN
+                    public.checklist_submissions cs
+                ON
+                    m.machineid = cs.machineid
+                    AND cs.frequency = 'Daily'
+                WHERE
+                    m.organizationid = $1
+                GROUP BY
+                    m.machineid, m.machinename, cs.shift
+                ORDER BY
+                    m.machineid, cs.shift;
+            `;
 
-        const result = await pool.query(query, [organizationId, frequency]);
+            const result = await pool.query(query, [organizationId]);
 
-        // Process the results with correct conversion
-        const machineCounts = result.rows.map(row => ({
-            machineId: row.machineid,
-            machineName: row.machinename,
-            totalCount: parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0,
-            doneCount: parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0,
-            remainingCount: (parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0) - (parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0)
-        }));
+            // Process the results and group by shift
+            const machineCounts = result.rows.reduce((acc, row) => {
+                let machine = acc.find(m => m.machineId === row.machineid);
+                if (!machine) {
+                    machine = {
+                        machineId: row.machineid,
+                        machineName: row.machinename,
+                        A: { totalCount: 0, doneCount: 0, remainingCount: 0 },
+                        B: { totalCount: 0, doneCount: 0, remainingCount: 0 },
+                        C: { totalCount: 0, doneCount: 0, remainingCount: 0 }
+                    };
+                    acc.push(machine);
+                }
 
-        res.status(200).json(machineCounts);
-    } catch (err) {
-        console.error('Error fetching machine counts:', err);
-        res.status(500).json({ error: 'Internal server error' });
+                const shift = row.shift || 'A'; // Default to 'A' if shift is missing
+                const shiftData = machine[shift] || { totalCount: 0, doneCount: 0, remainingCount: 0 };
+                shiftData.totalCount += parseInt(row.totalcount, 10);
+                shiftData.doneCount += parseInt(row.donecount, 10);
+                shiftData.remainingCount = shiftData.totalCount - shiftData.doneCount;
+                machine[shift] = shiftData;
+
+                return acc;
+            }, []);
+
+            res.status(200).json(machineCounts);
+        } catch (err) {
+            console.error('Error fetching machine counts:', err);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    } else {
+        try {
+            // Query to get the total and done counts for the specified frequency for each machine in the specified organization
+            const query = `
+                SELECT
+                    m.machineid AS machineId,
+                    m.machinename AS machineName,
+                    COALESCE(COUNT(cs.machineid), 0) AS total${frequency}Count,
+                    COALESCE(COUNT(CASE 
+                        WHEN cs.user_status = 'ok' AND cs.maintenance_status = 'ok' 
+                        AND cs.user_status IS NOT NULL AND cs.maintenance_status IS NOT NULL 
+                        THEN cs.machineid 
+                    END), 0) AS done${frequency}Count
+                FROM
+                    public.machines m
+                LEFT JOIN
+                    public.checklist_submissions cs
+                ON
+                    m.machineid = cs.machineid
+                    AND cs.frequency = $2
+                WHERE
+                    m.organizationid = $1
+                GROUP BY
+                    m.machineid, m.machinename;
+            `;
+
+            const result = await pool.query(query, [organizationId, frequency]);
+
+            // Process the results with correct conversion
+            const machineCounts = result.rows.map(row => ({
+                machineId: row.machineid,
+                machineName: row.machinename,
+                totalCount: parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0,
+                doneCount: parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0,
+                remainingCount: (parseInt(row[`total${frequency.toLowerCase()}count`], 10) || 0) - (parseInt(row[`done${frequency.toLowerCase()}count`], 10) || 0)
+            }));
+
+            res.status(200).json(machineCounts);
+        } catch (err) {
+            console.error('Error fetching machine counts:', err);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 }
 
