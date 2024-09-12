@@ -1144,7 +1144,6 @@ async function submission(req, res) {
         organizationId
     } = req.body;
 
-    console.log(req.body);
     const submissionId = uuidv4();
     const uploadedImageId = uploadedImage ? uuidv4() : null; // Only generate an ID if an image is provided
 
@@ -2547,13 +2546,14 @@ async function getMachinesWithPendingCheckpoints(req, res) {
         // Convert the image to base64
         const convertImageToBase64 = async (imagePath, imageName) => {
             if (imagePath) {
+                console.log(imagePath)
                 try {
                     const fileBuffer = await fs.readFile('.' + imagePath); // Use relative path
                     const base64File = fileBuffer.toString('base64');
                     const mimeType = mime.lookup(imageName) || 'application/octet-stream';
                     return `data:${mimeType};base64,${base64File}`;
                 } catch (err) {
-                    console.error(`Error reading image (${imageName}):`, err);
+                    //console.error(`Error reading image (${imageName}):`, err);
                     return null;
                 }
             }
