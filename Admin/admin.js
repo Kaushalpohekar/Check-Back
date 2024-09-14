@@ -2763,7 +2763,6 @@ async function getChecklistSummary(req, res) {
     }
 }
 
-
 async function getMachinesWithPendingChecklistsByFrequency(req, res) {
     const { organizationId, date } = req.params;
 
@@ -2777,6 +2776,7 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
             SELECT 
                 m.machineid, 
                 m.machinename,
+                m.description,
                 mi.imagename,
                 mi.imagepath
             FROM 
@@ -2896,6 +2896,7 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
                     const machineData = {
                         machineId: machine.machineid,
                         machineName: machine.machinename,
+                        description: machine.description, // Include the description
                         machineImage: machineImage
                     };
 
