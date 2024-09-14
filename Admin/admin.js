@@ -2654,6 +2654,263 @@ async function getMachinesWithPendingCheckpoints(req, res) {
     }
 }
 
+async function getChecklistSummary(req, res) {
+    const { organizationId, month, year } = req.params;
+
+    const client = await pool.connect();
+
+    try {
+        const GetChecklistSummaryQuery = `
+        WITH required_checklists AS (
+            -- Generate required checklists for each day in the month for 3 shifts
+            SELECT 
+                c.checkpointid,
+                c.checkpointname,
+                c.frequency,
+                c.machineid,
+                c.departmentid,
+                CASE 
+                    WHEN s.shift = 'Shift 1' THEN 'A'
+                    WHEN s.shift = 'Shift 2' THEN 'B'
+                    WHEN s.shift = 'Shift 3' THEN 'C'
+                END AS shift,  -- Map Shift 1, 2, 3 to A, B, C
+                d.date::date AS submission_date
+            FROM 
+                public.checklist c
+            JOIN public.machines m ON c.machineid = m.machineid  -- Join machines to access organizationid
+            CROSS JOIN (
+                -- Generate all days in the specified month
+                SELECT generate_series(
+                    DATE '${year}-${month}-01', 
+                    (DATE '${year}-${month}-01' + INTERVAL '1 month' - INTERVAL '1 day')::date, 
+                    INTERVAL '1 day'
+                )::date AS date
+            ) d
+            CROSS JOIN (
+                -- Generate 3 shifts per day
+                SELECT unnest(ARRAY['Shift 1', 'Shift 2', 'Shift 3']) AS shift
+            ) s
+            WHERE m.organizationid = $1  -- Use organizationid from the machines table
+            AND (
+                -- For daily checklists, they are required for each shift
+                (c.frequency = 'Daily') 
+                OR (
+                    -- For weekly checklists, only required once per week and only for Shift A
+                    c.frequency = 'Weekly' AND EXTRACT(ISODOW FROM d.date) = 1 AND s.shift = 'Shift 1'
+                )
+                OR (
+                    -- For monthly checklists, only required on the 1st of the month and only for Shift A
+                    c.frequency = 'Monthly' AND d.date = DATE_TRUNC('month', d.date) AND s.shift = 'Shift 1'
+                )
+                OR (
+                    -- For yearly checklists, only required on January 1st and only for Shift A
+                    c.frequency = 'Yearly' AND d.date = DATE_TRUNC('year', d.date) AND s.shift = 'Shift 1'
+                )
+            )
+        ),
+        submitted_checklists AS (
+            -- Get all submitted checklists for the organization in the specified month
+            SELECT 
+                cs.checklistid,
+                cs.machineid,
+                cs.submission_date::date,
+                cs.shift,
+                cs.maintenance_status
+            FROM 
+                public.checklist_submissions cs
+            JOIN public.machines m ON cs.machineid = m.machineid  -- Ensure organization match
+            WHERE 
+                m.organizationid = $1
+                AND cs.submission_date >= '${year}-${month}-01'
+                AND cs.submission_date < (DATE '${year}-${month}-01' + INTERVAL '1 month')
+        )
+        -- Calculate the summary
+        SELECT
+            rc.submission_date,
+            COUNT(rc.checkpointid) AS required_count, -- Total checklists required for the day
+            COUNT(sc.checklistid) AS submitted_count, -- Total submitted checklists for the day
+            COUNT(rc.checkpointid) - COUNT(sc.checklistid) AS pending_count, -- Pending checklists
+            COUNT(CASE WHEN sc.maintenance_status IS NULL OR sc.maintenance_status = 'not ok' THEN 1 END) AS maintenance_issue_count -- Submitted but with maintenance issues
+        FROM 
+            required_checklists rc
+        LEFT JOIN 
+            submitted_checklists sc
+        ON 
+            rc.checkpointid = sc.checklistid 
+            AND rc.machineid = sc.machineid
+            AND rc.submission_date = sc.submission_date
+            AND rc.shift = sc.shift  -- This will now match because both use A, B, C
+        GROUP BY 
+            rc.submission_date
+        ORDER BY 
+            rc.submission_date;
+        `;
+
+        const result = await client.query(GetChecklistSummaryQuery, [organizationId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'No data found' });
+        }
+
+        res.status(200).json(result.rows);
+
+    } catch (error) {
+        console.error('Error fetching checklist summary:', error);
+        res.status(500).json({ message: `Internal server error: ${error.message}` });
+
+    } finally {
+        client.release();
+    }
+}
+
+
+async function getMachinesWithPendingChecklistsByFrequency(req, res) {
+    const { organizationId, date } = req.params;
+
+    if (!organizationId || !date) {
+        return res.status(400).json({ error: 'Organization ID and Date are required' });
+    }
+
+    try {
+        // Step 1: Fetch all machines for the organization
+        const machineQuery = `
+            SELECT 
+                m.machineid, 
+                m.machinename,
+                mi.imagename,
+                mi.imagepath
+            FROM 
+                public.machines m
+            LEFT JOIN
+                public.machine_images mi ON m.machineid = mi.machineid
+            WHERE 
+                m.organizationid = $1;
+        `;
+        const machineResult = await pool.query(machineQuery, [organizationId]);
+        const machines = machineResult.rows;
+
+        // Function to convert image to base64
+        const convertImageToBase64 = async (imagePath, imageName) => {
+            if (imagePath) {
+                try {
+                    const fileBuffer = await fs.readFile('.' + imagePath); // Use relative path
+                    const base64File = fileBuffer.toString('base64');
+                    const mimeType = mime.lookup(imageName) || 'application/octet-stream';
+                    return `data:${mimeType};base64,${base64File}`;
+                } catch (err) {
+                    console.error(`Error reading image (${imageName}):`, err);
+                    return null;
+                }
+            }
+            return null;
+        };
+
+        // Restructure to contain frequency value and machine data
+        const frequencyData = [
+            { value: 'daily', machineData: [] },
+            { value: 'weekly', machineData: [] },
+            { value: 'monthly', machineData: [] },
+            { value: 'yearly', machineData: [] }
+        ];
+
+        // Step 2: For each machine, get checkpoints and check if submissions exist
+        await Promise.all(machines.map(async (machine) => {
+            const checkpointsQuery = `
+                SELECT 
+                    c.checkpointid, 
+                    c.checkpointname,
+                    c.importantnote,
+                    c.frequency
+                FROM 
+                    public.checklist c
+                WHERE 
+                    c.machineid = $1
+            `;
+            const checkpointsResult = await pool.query(checkpointsQuery, [machine.machineid]);
+            const checkpoints = checkpointsResult.rows;
+
+            // Step 3: Keep track of whether the machine has pending checkpoints for each frequency
+            const hasPendingCheckpoints = {
+                daily: false,
+                weekly: false,
+                monthly: false,
+                yearly: false
+            };
+
+            // Step 4: For each checkpoint, check if a submission exists in the appropriate time range
+            await Promise.all(checkpoints.map(async (checkpoint) => {
+                let interval;
+                const frequency = checkpoint.frequency ? checkpoint.frequency.toLowerCase() : 'yearly'; // Default to yearly if undefined
+
+                switch (frequency) {
+                    case 'daily':
+                        interval = '8 hours';
+                        break;
+                    case 'weekly':
+                        interval = '1 week';
+                        break;
+                    case 'monthly':
+                        interval = '1 month';
+                        break;
+                    case 'yearly':
+                        interval = '1 year';
+                        break;
+                    default:
+                        interval = '1 year'; 
+                }
+
+                const submissionQuery = `
+                    SELECT 
+                        1 
+                    FROM 
+                        public.checklist_submissions 
+                    WHERE 
+                        checklistid = $1 
+                        AND submission_date >= $2::timestamp - INTERVAL '${interval}'
+                        AND organizationid = $3
+                `;
+                const submissionResult = await pool.query(submissionQuery, [
+                    checkpoint.checkpointid,
+                    date,
+                    organizationId
+                ]);
+
+                // If no submission found, mark the machine as having pending checkpoints for that frequency
+                if (submissionResult.rowCount === 0) {
+                    hasPendingCheckpoints[frequency] = true;
+                }
+            }));
+
+            // Step 5: Add machine to respective frequency group if it has pending checkpoints
+            for (const [frequency, hasPending] of Object.entries(hasPendingCheckpoints)) {
+                if (hasPending) {
+                    const machineImage = machine.imagepath ? await convertImageToBase64(machine.imagepath, machine.imagename) : null;
+
+                    const machineData = {
+                        machineId: machine.machineid,
+                        machineName: machine.machinename,
+                        machineImage: machineImage
+                    };
+
+                    // Find the correct frequency object and push machine data into it
+                    const frequencyObj = frequencyData.find(f => f.value === frequency);
+                    if (frequencyObj && !frequencyObj.machineData.some(m => m.machineId === machine.machineid)) {
+                        frequencyObj.machineData.push(machineData);
+                    }
+                }
+            }
+        }));
+
+        // Step 6: Send the final response
+        res.status(200).json({ data: frequencyData });
+    } catch (err) {
+        console.error('Error fetching machines and pending checkpoints:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
+
 
 module.exports = {
     addMachineDetails,
@@ -2694,5 +2951,7 @@ module.exports = {
     addDepartment,
     getMachineCounts,
     fetchLatestFillSubmissions,
-    getMachinesWithPendingCheckpoints
+    getMachinesWithPendingCheckpoints,
+    getChecklistSummary,
+    getMachinesWithPendingChecklistsByFrequency
 };

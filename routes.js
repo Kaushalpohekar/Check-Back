@@ -62,5 +62,7 @@ router.get('/getOperatorsName/:organizationId', ad.getOperatorsName);  //done
 router.post('/addDepartment', ad.addDepartment);
 router.get('/fetchLatestFillSubmissions/:organizationId/:status', ad.fetchLatestFillSubmissions);
 router.get('/getMachinesWithPendingCheckpoints/:organizationId/:date', ad.getMachinesWithPendingCheckpoints);
+router.get('/getChecklistSummary/:organizationId/:month/:year', ad.getChecklistSummary);
+router.get('/getMachinesWithPendingChecklistsByFrequency/:organizationId/:date', ad.getMachinesWithPendingChecklistsByFrequency);
 
 module.exports=router;
