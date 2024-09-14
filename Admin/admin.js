@@ -2793,9 +2793,16 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
         const convertImageToBase64 = async (imagePath, imageName) => {
             if (imagePath) {
                 try {
-                    const fileBuffer = await fs.readFile('.' + imagePath); // Use relative path
+                    // Log the path and name for debugging
+                    console.log(`Reading image from path: ${'.' + imagePath}, with name: ${imageName}`);
+                    
+                    const fileBuffer = await fs.promises.readFile('.' + imagePath); // Ensure the path is correct
                     const base64File = fileBuffer.toString('base64');
                     const mimeType = mime.lookup(imageName) || 'application/octet-stream';
+
+                    // Log the mime type for debugging
+                    console.log(`Determined MIME type: ${mimeType}`);
+                    
                     return `data:${mimeType};base64,${base64File}`;
                 } catch (err) {
                     console.error(`Error reading image (${imageName}):`, err);
