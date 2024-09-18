@@ -3140,6 +3140,99 @@ async function getDashboardCount(req, res) {
     }
 }
 
+async function getChecklistCountsForDate(req, res) {
+    const { organizationId, date } = req.params; // single date input
+
+    const client = await pool.connect();
+
+    try {
+        const GetChecklistCountsForDateQuery = `
+        WITH required_checklists AS (
+            -- Generate required checkpoints for each machine and frequency on the given date
+            SELECT 
+                c.machineid,
+                m.machinename,
+                c.frequency,
+                COUNT(c.checkpointid) AS total_required,  -- Total required checkpoints
+                $2::date AS submission_date,
+                CASE 
+                    -- For daily frequency, include shifts A, B, C
+                    WHEN c.frequency = 'Daily' THEN s.shift
+                    ELSE NULL
+                END AS shift
+            FROM 
+                public.checklist c
+            JOIN public.machines m ON c.machineid = m.machineid  -- Join machines to access organizationid and machinename
+            LEFT JOIN LATERAL (
+                -- For daily checklists, generate shifts A, B, C
+                SELECT unnest(ARRAY['A', 'B', 'C']) AS shift
+            ) s ON c.frequency = 'Daily'
+            WHERE 
+                m.organizationid = $1
+            GROUP BY 
+                c.machineid, m.machinename, c.frequency, s.shift
+        ),
+        submitted_checklists AS (
+            -- Get all submitted checkpoints for the given date
+            SELECT 
+                cs.machineid,
+                cs.frequency,
+                COUNT(cs.checklistid) AS filled_count, -- Total submitted checkpoints
+                COUNT(CASE 
+                    WHEN cs.maintenance_status = 'NOT OK' OR cs.maintenance_status IS NULL THEN 1 
+                END) AS maintenance_issue_count, -- Count of 'NOT OK' or NULL maintenance status
+                cs.submission_date::date,
+                cs.shift
+            FROM 
+                public.checklist_submissions cs
+            JOIN public.machines m ON cs.machineid = m.machineid  -- Ensure organization match
+            WHERE 
+                m.organizationid = $1
+                AND cs.submission_date::date = $2::date
+            GROUP BY 
+                cs.machineid, cs.frequency, cs.submission_date, cs.shift
+        )
+        -- Combine required and submitted counts, calculating remaining checkpoints and maintenance issues
+        SELECT
+            rc.machineid,
+            rc.machinename,
+            rc.frequency,
+            rc.shift,
+            rc.total_required,  -- Total required checkpoints
+            COALESCE(sc.filled_count, 0) AS filled_count,  -- Checkpoints that have been submitted
+            rc.total_required - COALESCE(sc.filled_count, 0) AS remaining_count, -- Remaining checkpoints
+            COALESCE(sc.maintenance_issue_count, 0) AS maintenance_issue_count -- Count of maintenance issues
+        FROM 
+            required_checklists rc
+        LEFT JOIN 
+            submitted_checklists sc
+        ON 
+            rc.machineid = sc.machineid 
+            AND rc.frequency = sc.frequency
+            AND rc.submission_date = sc.submission_date
+            AND rc.shift = sc.shift  -- Match shifts for daily checklists
+        ORDER BY 
+            rc.machineid, rc.frequency, rc.shift;
+        `;
+
+        const result = await client.query(GetChecklistCountsForDateQuery, [organizationId, date]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'No data found for the given date' });
+        }
+
+        res.status(200).json(result.rows);
+
+    } catch (error) {
+        console.error('Error fetching checklist counts:', error);
+        res.status(500).json({ message: 'Internal server error' });
+
+    } finally {
+        client.release();
+    }
+}
+
+
 
 module.exports = {
     addMachineDetails,
@@ -3183,5 +3276,6 @@ module.exports = {
     getMachinesWithPendingCheckpoints,
     getChecklistSummary,
     getMachinesWithPendingChecklistsByFrequency,
-    getDashboardCount
+    getDashboardCount,
+    getChecklistCountsForDate
 };

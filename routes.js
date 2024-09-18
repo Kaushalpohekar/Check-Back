@@ -65,4 +65,6 @@ router.get('/getMachinesWithPendingCheckpoints/:organizationId/:date', ad.getMac
 router.get('/getChecklistSummary/:organizationId/:month/:year', ad.getChecklistSummary);
 router.get('/getMachinesWithPendingChecklistsByFrequency/:organizationId/:date', ad.getMachinesWithPendingChecklistsByFrequency);
 router.get('/getDashboardCount/:organizationId/:startDate/:endDate', ad.getDashboardCount);
+router.get('/getChecklistCountsForDate/:organizationId/:date', ad.getChecklistCountsForDate);
+
 module.exports=router;
