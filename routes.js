@@ -64,7 +64,7 @@ router.get('/fetchLatestFillSubmissions/:organizationId/:status', ad.fetchLatest
 router.get('/getMachinesWithPendingCheckpoints/:organizationId/:date', ad.getMachinesWithPendingCheckpoints);
 router.get('/getChecklistSummary/:organizationId/:month/:year', ad.getChecklistSummary);
 router.get('/getMachinesWithPendingChecklistsByFrequency/:organizationId/:date', ad.getMachinesWithPendingChecklistsByFrequency);
-router.get('/getDashboardCount/:organizationId/:startDate/:endDate', ad.getDashboardCount);
-router.get('/getChecklistCountsForDate/:organizationId/:date', ad.getChecklistCountsForDate);
+router.get('/getDashboardCount/:organizationId/:startDate/:endDate', ad.getDashboardCount); //done
+router.get('/getChecklistCountsForDate/:organizationId/:date', ad.getChecklistCountsForDate); //done
 
 module.exports=router;
