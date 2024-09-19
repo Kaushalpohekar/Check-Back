@@ -2457,7 +2457,7 @@ const fetchLatestFillSubmissions = async (req, res) => {
 
         if (status === 'completed') {
             statusCondition = `AND cs.user_status = 'ok' AND cs.maintenance_status = 'ok'`;
-        } else if (status === 'pending') {
+        } else if (status === 'notok') {
             statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok')`;
         }
 
@@ -2519,6 +2519,9 @@ const fetchLatestFillSubmissions = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+
+
 
 
 async function getMachinesWithPendingCheckpoints(req, res) {
