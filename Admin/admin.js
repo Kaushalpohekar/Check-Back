@@ -1037,7 +1037,6 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
 //         submittedBy,
 //         organizationId
 //     } = req.body;
-//     console.log(req.body);
 //     const submissionId = uuidv4();
 //     const uploadedImageId = uuidv4(); // Image ID for the uploaded image
 
@@ -2546,7 +2545,6 @@ async function getMachinesWithPendingCheckpoints(req, res) {
         // Convert the image to base64
         const convertImageToBase64 = async (imagePath, imageName) => {
             if (imagePath) {
-                console.log(imagePath)
                 try {
                     const fileBuffer = await fs.readFile('.' + imagePath); // Use relative path
                     const base64File = fileBuffer.toString('base64');
@@ -2793,15 +2791,10 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
         const convertImageToBase64 = async (imagePath, imageName) => {
             if (imagePath) {
                 try {
-                    // Log the path and name for debugging
-                    console.log(`Reading image from path: ${'.' + imagePath}, with name: ${imageName}`);
                     
                     const fileBuffer = await fs.promises.readFile('.' + imagePath); // Ensure the path is correct
                     const base64File = fileBuffer.toString('base64');
                     const mimeType = mime.lookup(imageName) || 'application/octet-stream';
-
-                    // Log the mime type for debugging
-                    console.log(`Determined MIME type: ${mimeType}`);
                     
                     return `data:${mimeType};base64,${base64File}`;
                 } catch (err) {
@@ -2918,111 +2911,6 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
 }
 
 
-// async function getDashboardCount(req, res) {
-//     const { organizationId, startDate, endDate } = req.params;
-
-//     const client = await pool.connect();
-
-//     try {
-//         const GetChecklistSummaryQuery = `
-//         WITH required_checklists AS (
-//             -- Generate required checklists for each day within the provided date range for each machine and frequency
-//             SELECT 
-//                 c.machineid,
-//                 m.machinename, -- Include machine name
-//                 c.frequency,
-//                 COUNT(DISTINCT c.checkpointid) AS checkpoint_count,
-//                 gs.submission_date
-//             FROM 
-//                 public.checklist c
-//             JOIN public.machines m ON c.machineid = m.machineid  -- Join machines to access organizationid and machinename
-//             CROSS JOIN LATERAL (
-//                 -- Generate series based on frequency
-//                 SELECT generate_series(
-//                     CASE 
-//                         WHEN c.frequency = 'Daily' THEN $2::date
-//                         WHEN c.frequency = 'Weekly' THEN DATE_TRUNC('week', $2::date)
-//                         WHEN c.frequency = 'Monthly' THEN DATE_TRUNC('month', $2::date)
-//                         WHEN c.frequency = 'Yearly' THEN DATE_TRUNC('year', $2::date)
-//                     END,
-//                     CASE 
-//                         WHEN c.frequency = 'Daily' THEN $3::date
-//                         WHEN c.frequency = 'Weekly' THEN DATE_TRUNC('week', $3::date)
-//                         WHEN c.frequency = 'Monthly' THEN DATE_TRUNC('month', $3::date)
-//                         WHEN c.frequency = 'Yearly' THEN DATE_TRUNC('year', $3::date)
-//                     END,
-//                     CASE 
-//                         WHEN c.frequency = 'Daily' THEN INTERVAL '1 day'
-//                         WHEN c.frequency = 'Weekly' THEN INTERVAL '1 week'
-//                         WHEN c.frequency = 'Monthly' THEN INTERVAL '1 month'
-//                         WHEN c.frequency = 'Yearly' THEN INTERVAL '1 year'
-//                     END
-//                 ) AS submission_date
-//             ) gs
-//             WHERE 
-//                 m.organizationid = $1
-//             GROUP BY 
-//                 c.machineid, m.machinename, c.frequency, gs.submission_date
-//         ),
-//         submitted_checklists AS (
-//             -- Get all submitted checklists for the organization in the provided date range
-//             SELECT 
-//                 cs.machineid,
-//                 cs.frequency,
-//                 cs.submission_date::date,
-//                 COUNT(cs.checklistid) AS submitted_count
-//             FROM 
-//                 public.checklist_submissions cs
-//             JOIN public.machines m ON cs.machineid = m.machineid  -- Ensure organization match and include machine name
-//             WHERE 
-//                 m.organizationid = $1
-//                 AND cs.submission_date BETWEEN $2::date AND $3::date
-//             GROUP BY 
-//                 cs.machineid, cs.frequency, cs.submission_date
-//         )
-//         -- Calculate the summary by grouping by machineid and frequency
-//         SELECT
-//             rc.machineid,
-//             rc.machinename,  -- Include machine name in final result
-//             rc.frequency,
-//             COUNT(DISTINCT rc.submission_date) AS total_required_count, -- Total grouped checklists required
-//             COALESCE(SUM(sc.submitted_count), 0) AS total_submitted_count, -- Total submitted checklists for the group
-//             COUNT(DISTINCT rc.submission_date) - COALESCE(SUM(sc.submitted_count), 0) AS pending_count, -- Pending checklists
-//             COUNT(CASE WHEN rc.frequency = 'Daily' THEN 1 END) AS daily_total, -- Total daily checklists
-//             COUNT(CASE WHEN rc.frequency = 'Weekly' THEN 1 END) AS weekly_total, -- Total weekly checklists
-//             COUNT(CASE WHEN rc.frequency = 'Monthly' THEN 1 END) AS monthly_total, -- Total monthly checklists
-//             COUNT(CASE WHEN rc.frequency = 'Yearly' THEN 1 END) AS yearly_total -- Total yearly checklists
-//         FROM 
-//             required_checklists rc
-//         LEFT JOIN 
-//             submitted_checklists sc
-//         ON 
-//             rc.machineid = sc.machineid 
-//             AND rc.frequency = sc.frequency
-//             AND rc.submission_date = sc.submission_date
-//         GROUP BY 
-//             rc.machineid, rc.machinename, rc.frequency
-//         ORDER BY 
-//             rc.machineid, rc.frequency;
-//         `;
-
-//         const result = await client.query(GetChecklistSummaryQuery, [organizationId, startDate, endDate]);
-
-//         if (result.rows.length === 0) {
-//             return res.status(404).json({ message: 'No data found' });
-//         }
-
-//         res.status(200).json(result.rows);
-
-//     } catch (error) {
-//         console.error('Error fetching checklist summary:', error);
-//         res.status(500).json({ message: 'Internal server error' });
-
-//     } finally {
-//         client.release();
-//     }
-// }
-
 async function getDashboardCount(req, res) {
     const { organizationId, startDate, endDate } = req.params;
 
@@ -3057,9 +2945,9 @@ async function getDashboardCount(req, res) {
                     END,
                     CASE 
                         WHEN c.frequency = 'Daily' THEN $3::date
-                        WHEN c.frequency = 'Weekly' THEN DATE_TRUNC('week', $3::date)
-                        WHEN c.frequency = 'Monthly' THEN DATE_TRUNC('month', $3::date)
-                        WHEN c.frequency = 'Yearly' THEN DATE_TRUNC('year', $3::date)
+                        WHEN c.frequency = 'Weekly' THEN DATE_TRUNC('week', $3::date) + INTERVAL '6 days'
+                        WHEN c.frequency = 'Monthly' THEN DATE_TRUNC('month', $3::date) + INTERVAL '1 month' - INTERVAL '1 day'
+                        WHEN c.frequency = 'Yearly' THEN DATE_TRUNC('year', $3::date) + INTERVAL '1 year' - INTERVAL '1 day'
                     END,
                     CASE 
                         WHEN c.frequency = 'Daily' THEN INTERVAL '1 day'
@@ -3079,31 +2967,31 @@ async function getDashboardCount(req, res) {
                 c.machineid, m.machinename, c.frequency, gs.submission_date, s.shift
         ),
         submitted_checklists AS (
-            -- Get all submitted checklists for the organization in the provided date range
-            SELECT 
+            -- Get distinct checklist submissions (1 per machine, frequency, shift, and submission date)
+            SELECT DISTINCT
                 cs.machineid,
                 cs.frequency,
-                cs.submission_date::date,
-                cs.shift,
-                COUNT(cs.checklistid) AS submitted_count
+                cs.submission_date::date AS submission_date,
+                CASE 
+                    WHEN cs.frequency = 'Daily' THEN cs.shift
+                    ELSE NULL
+                END AS shift
             FROM 
                 public.checklist_submissions cs
             JOIN public.machines m ON cs.machineid = m.machineid  -- Ensure organization match
             WHERE 
                 m.organizationid = $1
                 AND cs.submission_date BETWEEN $2::date AND $3::date
-            GROUP BY 
-                cs.machineid, cs.frequency, cs.submission_date, cs.shift
         )
-        -- Calculate the summary by grouping by machineid, frequency, and shift
+        -- Final summary with correct counts
         SELECT
             rc.machineid,
             rc.machinename,  -- Include machine name in final result
             rc.frequency,
             rc.shift,  -- Include shift as A, B, C
             COUNT(DISTINCT rc.submission_date) AS total_required_count, -- Total grouped checklists required
-            COALESCE(SUM(sc.submitted_count), 0) AS total_submitted_count, -- Total submitted checklists for the group
-            COUNT(DISTINCT rc.submission_date) - COALESCE(SUM(sc.submitted_count), 0) AS pending_count, -- Pending checklists
+            COALESCE(COUNT(DISTINCT sc.submission_date), 0) AS total_submitted_count,  -- Use DISTINCT for submission dates
+            COUNT(DISTINCT rc.submission_date) - COALESCE(COUNT(DISTINCT sc.submission_date), 0) AS pending_count, -- Pending checklists
             COUNT(CASE WHEN rc.frequency = 'Daily' THEN 1 END) AS daily_total, -- Total daily checklists
             COUNT(CASE WHEN rc.frequency = 'Weekly' THEN 1 END) AS weekly_total, -- Total weekly checklists
             COUNT(CASE WHEN rc.frequency = 'Monthly' THEN 1 END) AS monthly_total, -- Total monthly checklists
@@ -3116,7 +3004,7 @@ async function getDashboardCount(req, res) {
             rc.machineid = sc.machineid 
             AND rc.frequency = sc.frequency
             AND rc.submission_date = sc.submission_date
-            AND rc.shift = sc.shift  -- Match shifts as A, B, C for daily checklists
+            AND COALESCE(rc.shift, 'N/A') = COALESCE(sc.shift, 'N/A')  -- Match shifts correctly
         GROUP BY 
             rc.machineid, rc.machinename, rc.frequency, rc.shift
         ORDER BY 
@@ -3140,81 +3028,71 @@ async function getDashboardCount(req, res) {
     }
 }
 
+
 async function getChecklistCountsForDate(req, res) {
     const { organizationId, date } = req.params; // single date input
-
     const client = await pool.connect();
 
     try {
+        // Updated query with dynamic date parameter
         const GetChecklistCountsForDateQuery = `
-        WITH required_checklists AS (
-            -- Generate required checkpoints for each machine and frequency on the given date
+            WITH required_checklists AS (
+                SELECT 
+                    c.machineid,
+                    m.machinename,
+                    c.frequency,
+                    s.shift,
+                    COUNT(*) AS total_required_count
+                FROM public.checklist c
+                JOIN public.machines m ON c.machineid = m.machineid
+                LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) ON c.frequency = 'Daily' AND s.shift IS NOT NULL
+                WHERE c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
+                GROUP BY c.machineid, m.machinename, c.frequency, s.shift
+                UNION
+                SELECT 
+                    c.machineid,
+                    m.machinename,
+                    c.frequency,
+                    NULL AS shift,
+                    COUNT(*) AS total_required_count
+                FROM public.checklist c
+                JOIN public.machines m ON c.machineid = m.machineid
+                WHERE c.frequency IN ('Weekly', 'Monthly', 'Yearly')
+                AND c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
+                GROUP BY c.machineid, m.machinename, c.frequency
+            ),
+            submitted_checklists AS (
+                SELECT 
+                    cs.machineid,
+                    c.frequency,
+                    cs.shift,
+                    COUNT(*) AS total_submitted_count
+                FROM public.checklist_submissions cs
+                JOIN public.checklist c ON cs.checklistid = c.checkpointid
+                WHERE cs.submission_date::date = $2
+                GROUP BY cs.machineid, c.frequency, cs.shift
+            )
             SELECT 
-                c.machineid,
-                m.machinename,
-                c.frequency,
-                COUNT(c.checkpointid) AS total_required,  -- Total required checkpoints
-                $2::date AS submission_date,
-                CASE 
-                    -- For daily frequency, include shifts A, B, C
-                    WHEN c.frequency = 'Daily' THEN s.shift
-                    ELSE NULL
-                END AS shift
-            FROM 
-                public.checklist c
-            JOIN public.machines m ON c.machineid = m.machineid  -- Join machines to access organizationid and machinename
-            LEFT JOIN LATERAL (
-                -- For daily checklists, generate shifts A, B, C
-                SELECT unnest(ARRAY['A', 'B', 'C']) AS shift
-            ) s ON c.frequency = 'Daily'
-            WHERE 
-                m.organizationid = $1
-            GROUP BY 
-                c.machineid, m.machinename, c.frequency, s.shift
-        ),
-        submitted_checklists AS (
-            -- Get all submitted checkpoints for the given date
-            SELECT 
-                cs.machineid,
-                cs.frequency,
-                COUNT(cs.checklistid) AS filled_count, -- Total submitted checkpoints
-                COUNT(CASE 
-                    WHEN cs.maintenance_status = 'NOT OK' OR cs.maintenance_status IS NULL THEN 1 
-                END) AS maintenance_issue_count, -- Count of 'NOT OK' or NULL maintenance status
-                cs.submission_date::date,
-                cs.shift
-            FROM 
-                public.checklist_submissions cs
-            JOIN public.machines m ON cs.machineid = m.machineid  -- Ensure organization match
-            WHERE 
-                m.organizationid = $1
-                AND cs.submission_date::date = $2::date
-            GROUP BY 
-                cs.machineid, cs.frequency, cs.submission_date, cs.shift
-        )
-        -- Combine required and submitted counts, calculating remaining checkpoints and maintenance issues
-        SELECT
-            rc.machineid,
-            rc.machinename,
-            rc.frequency,
-            rc.shift,
-            rc.total_required,  -- Total required checkpoints
-            COALESCE(sc.filled_count, 0) AS filled_count,  -- Checkpoints that have been submitted
-            rc.total_required - COALESCE(sc.filled_count, 0) AS remaining_count, -- Remaining checkpoints
-            COALESCE(sc.maintenance_issue_count, 0) AS maintenance_issue_count -- Count of maintenance issues
-        FROM 
-            required_checklists rc
-        LEFT JOIN 
-            submitted_checklists sc
-        ON 
-            rc.machineid = sc.machineid 
-            AND rc.frequency = sc.frequency
-            AND rc.submission_date = sc.submission_date
-            AND rc.shift = sc.shift  -- Match shifts for daily checklists
-        ORDER BY 
-            rc.machineid, rc.frequency, rc.shift;
+                rc.machineid,
+                rc.machinename,
+                rc.frequency,
+                rc.shift,
+                rc.total_required_count,
+                COALESCE(sc.total_submitted_count, 0) AS total_submitted_count,
+                rc.total_required_count - COALESCE(sc.total_submitted_count, 0) AS pending_count,
+                CASE WHEN rc.frequency = 'Daily' THEN rc.total_required_count ELSE 0 END AS daily_total,
+                CASE WHEN rc.frequency = 'Weekly' THEN rc.total_required_count ELSE 0 END AS weekly_total,
+                CASE WHEN rc.frequency = 'Monthly' THEN rc.total_required_count ELSE 0 END AS monthly_total,
+                CASE WHEN rc.frequency = 'Yearly' THEN rc.total_required_count ELSE 0 END AS yearly_total
+            FROM required_checklists rc
+            LEFT JOIN submitted_checklists sc
+            ON rc.machineid = sc.machineid 
+            AND rc.frequency = sc.frequency 
+            AND rc.shift = sc.shift
+            ORDER BY rc.machineid, rc.frequency, rc.shift;
         `;
 
+        // Execute the query with parameters
         const result = await client.query(GetChecklistCountsForDateQuery, [organizationId, date]);
 
         if (result.rows.length === 0) {
@@ -3226,7 +3104,6 @@ async function getChecklistCountsForDate(req, res) {
     } catch (error) {
         console.error('Error fetching checklist counts:', error);
         res.status(500).json({ message: 'Internal server error' });
-
     } finally {
         client.release();
     }
