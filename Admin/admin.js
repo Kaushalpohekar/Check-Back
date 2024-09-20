@@ -2441,10 +2441,90 @@ async function getMachineCounts(req, res) {
     }
 }
 
+// const fetchLatestFillSubmissions = async (req, res) => {
+//     const organizationId = req.params.organizationId;
+//     const status = req.params.status;
+
+//     if (!organizationId || !status) {
+//         return res.status(400).json({ error: 'Organization ID and Status are required' });
+//     }
+
+//     if (status !== 'completed' && status !== 'pending') {
+//         return res.status(400).json({ error: 'Invalid status provided. Use "completed" or "pending".' });
+//     }
+
+//     try {
+//         let statusCondition = '';
+
+//         if (status === 'completed') {
+//             statusCondition = `AND cs.user_status = 'ok' AND cs.maintenance_status = 'ok'`;
+//         } else if (status === 'notok') {
+//             statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok')`;
+//         }
+
+//         const query = `
+//             SELECT
+//                 si.imagename AS user_image_name,
+//                 si.imagepath AS user_image_path,
+//                 m.machinename,
+//                 cs.submissionid,
+//                 c.checkpointname,
+//                 cs.user_status,
+//                 cs.maintenance_status,
+//                 cs.submission_date
+//             FROM
+//                 public.checklist_submissions cs
+//             JOIN
+//                 public.machines m ON cs.machineid = m.machineid
+//             JOIN
+//                 public.checklist c ON cs.checklistid = c.checkpointid
+//             LEFT JOIN
+//                 public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
+//             WHERE
+//                 cs.organizationid = $1
+//                 AND DATE(cs.submission_date) = CURRENT_DATE
+//                 ${statusCondition};
+//         `;
+
+//         const result = await pool.query(query, [organizationId]);
+
+//         const submissions = result.rows.map(row => {
+//             const submission = {
+//                 submissionid: row.submissionid,
+//                 machinename: row.machinename,
+//                 checkpointname: row.checkpointname,
+//                 user_status: row.user_status,
+//                 maintenance_status: row.maintenance_status,
+//                 userImage: null,
+//                 submitted_date: row.submission_date
+//             };
+
+//             // Convert user image to base64
+//             if (row.user_image_path) {
+//                 try {
+//                     const fileBuffer = fs.readFileSync('.' + row.user_image_path);
+//                     const base64File = fileBuffer.toString('base64');
+//                     const mimeType = mime.lookup(row.user_image_name);
+//                     submission.userImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+//                 } catch (err) {
+//                     console.error(`Error reading image (${row.user_image_name}):`, err);
+//                 }
+//             }
+
+//             return submission;
+//         });
+
+//         res.status(200).json(submissions);
+//     } catch (err) {
+//         console.error('Error fetching latest submissions:', err);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// };
 const fetchLatestFillSubmissions = async (req, res) => {
     const organizationId = req.params.organizationId;
     const status = req.params.status;
 
+    // Validate request parameters
     if (!organizationId || !status) {
         return res.status(400).json({ error: 'Organization ID and Status are required' });
     }
@@ -2454,14 +2534,16 @@ const fetchLatestFillSubmissions = async (req, res) => {
     }
 
     try {
+        // Set the status condition based on the status parameter
         let statusCondition = '';
 
         if (status === 'completed') {
             statusCondition = `AND cs.user_status = 'ok' AND cs.maintenance_status = 'ok'`;
-        } else if (status === 'notok') {
+        } else if (status === 'pending') {
             statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok')`;
         }
 
+        // SQL query to fetch submissions
         const query = `
             SELECT
                 si.imagename AS user_image_name,
@@ -2479,15 +2561,18 @@ const fetchLatestFillSubmissions = async (req, res) => {
             JOIN
                 public.checklist c ON cs.checklistid = c.checkpointid
             LEFT JOIN
-                public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
+                public.checklist_images si ON cs.actual_checklist_imageid = si.imageid
             WHERE
                 cs.organizationid = $1
                 AND DATE(cs.submission_date) = CURRENT_DATE
                 ${statusCondition};
         `;
 
+        // Execute the query
         const result = await pool.query(query, [organizationId]);
+        console.log(result.rows)
 
+        // Process the result and build the response
         const submissions = result.rows.map(row => {
             const submission = {
                 submissionid: row.submissionid,
@@ -2499,13 +2584,14 @@ const fetchLatestFillSubmissions = async (req, res) => {
                 submitted_date: row.submission_date
             };
 
-            // Convert user image to base64
+            // Convert user image to base64 if image path exists
             if (row.user_image_path) {
+                const filePath = path.resolve(row.user_image_path); // Ensure the path is correctly resolved
                 try {
-                    const fileBuffer = fs.readFileSync('.' + row.user_image_path);
-                    const base64File = fileBuffer.toString('base64');
-                    const mimeType = mime.lookup(row.user_image_name);
-                    submission.userImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+                    const fileBuffer = fs.readFileSync(filePath); // Read the image file
+                    const base64File = fileBuffer.toString('base64'); // Convert to base64
+                    const mimeType = mime.lookup(row.user_image_name); // Get the MIME type
+                    submission.userImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`; // Attach base64 image
                 } catch (err) {
                     console.error(`Error reading image (${row.user_image_name}):`, err);
                 }
@@ -2514,13 +2600,13 @@ const fetchLatestFillSubmissions = async (req, res) => {
             return submission;
         });
 
+        // Send the submissions as response
         res.status(200).json(submissions);
     } catch (err) {
         console.error('Error fetching latest submissions:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-
 
 
 
