@@ -1297,6 +1297,7 @@ async function updateSubmissionMaintenance(req, res) {
         const UpdateSubmissionQuery = `
             UPDATE public.checklist_submissions
             SET maintenance_status = $1,
+                user_status = $1,
                 maintenance_remarks = $2,
                 maintenance_imageid = $3
             WHERE submissionid = $4;
