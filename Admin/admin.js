@@ -2570,6 +2570,7 @@ const fetchLatestFillSubmissions = async (req, res) => {
 
         // Execute the query
         const result = await pool.query(query, [organizationId]);
+        console.log(result.rows)
 
         // Process the result and build the response
         const submissions = result.rows.map(row => {
