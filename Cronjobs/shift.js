@@ -11,16 +11,21 @@ async function updateShifts() {
         const updateQuery = `
             UPDATE checklist_submissions
             SET shift = CASE
-                WHEN EXTRACT(HOUR FROM submission_date) >= 6 AND EXTRACT(HOUR FROM submission_date) < 14 THEN 'A'
-                WHEN EXTRACT(HOUR FROM submission_date) >= 14 AND EXTRACT(HOUR FROM submission_date) < 22 THEN 'B'
+                WHEN EXTRACT(HOUR FROM submission_date) >= 0.5 AND EXTRACT(HOUR FROM submission_date) < 8.5 THEN 'A'
+                WHEN EXTRACT(HOUR FROM submission_date) >= 8.5 AND EXTRACT(HOUR FROM submission_date) < 4.5 THEN 'B'
                 ELSE 'C'
             END
             WHERE submission_date >= NOW() - INTERVAL '24 hours'
+            RETURNING *;
         `;
         
-        await client.query(updateQuery);
+        const result = await client.query(updateQuery);
         await client.query('COMMIT');
-        console.log('Shifts updated successfully', new Date());
+        console.log(`Shifts updated successfully: ${result.rowCount} rows at`, new Date());
+
+        if (result.rows.length > 0) {
+            //console.log('Updated rows:', result.rows);
+        }
     } catch (error) {
         console.error('Error updating shifts:', error);
         await client.query('ROLLBACK');

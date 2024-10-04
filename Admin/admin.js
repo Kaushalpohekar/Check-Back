@@ -2444,9 +2444,10 @@ async function getMachineCounts(req, res) {
 const fetchLatestFillSubmissions = async (req, res) => {
     const organizationId = req.params.organizationId;
     const status = req.params.status;
+    const date = req.query.date;
 
-    if (!organizationId || !status) {
-        return res.status(400).json({ error: 'Organization ID and Status are required' });
+    if (!organizationId || !status || !date) {
+        return res.status(400).json({ error: 'Organization ID, Status and date are required' });
     }
 
     if (status !== 'completed' && status !== 'pending') {
@@ -2462,29 +2463,6 @@ const fetchLatestFillSubmissions = async (req, res) => {
             statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok')`;
         }
 
-        // const query = `
-        //     SELECT
-        //         si.imagename AS user_image_name,
-        //         si.imagepath AS user_image_path,
-        //         m.machinename,
-        //         cs.submissionid,
-        //         c.checkpointname,
-        //         cs.user_status,
-        //         cs.maintenance_status,
-        //         cs.submission_date
-        //     FROM
-        //         public.checklist_submissions cs
-        //     JOIN
-        //         public.machines m ON cs.machineid = m.machineid
-        //     JOIN
-        //         public.checklist c ON cs.checklistid = c.checkpointid
-        //     LEFT JOIN
-        //         public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
-        //     WHERE
-        //         cs.organizationid = $1
-        //         AND DATE(cs.submission_date) = CURRENT_DATE
-        //         ${statusCondition};
-        // `;
         const query = `
             SELECT
                 si.imagename AS user_image_name,
@@ -2505,11 +2483,11 @@ const fetchLatestFillSubmissions = async (req, res) => {
                 public.checklist_images si ON cs.actual_checklist_imageid = si.imageid
             WHERE
                 cs.organizationid = $1
-                AND DATE(cs.submission_date) = CURRENT_DATE
+                AND DATE(cs.submission_date) = $2
                 ${statusCondition};
         `;
 
-        const result = await pool.query(query, [organizationId]);
+        const result = await pool.query(query, [organizationId, date]);
 
         const submissions = result.rows.map(row => {
             const submission = {
@@ -2522,7 +2500,6 @@ const fetchLatestFillSubmissions = async (req, res) => {
                 submitted_date: row.submission_date
             };
 
-            // Convert user image to base64
             if (row.user_image_path) {
                 try {
                     const fileBuffer = fs.readFileSync('.' + row.user_image_path);
@@ -2543,9 +2520,6 @@ const fetchLatestFillSubmissions = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-
-
-
 
 
 async function getMachinesWithPendingCheckpoints(req, res) {
@@ -2941,6 +2915,11 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
 async function getDashboardCount(req, res) {
     const { organizationId, startDate, endDate } = req.params;
 
+    // Parameter validation
+    if (!organizationId || !startDate || !endDate) {
+        return res.status(400).json({ message: 'Invalid parameters' });
+    }
+
     const client = await pool.connect();
 
     try {
@@ -3010,7 +2989,40 @@ async function getDashboardCount(req, res) {
                 JOIN public.machines m ON cs.machineid = m.machineid
                 WHERE 
                     m.organizationid = $3
-                    AND cs.submission_date BETWEEN $1::date AND $2::date
+                    AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
+                    AND (cs.maintenance_status IS NOT NULL 
+                        OR cs.maintenance_status = 'ok' 
+                        OR cs.user_status IS NOT NULL 
+                        OR cs.user_status = 'ok' 
+                        OR cs.admin_action IS NULL 
+                        OR cs.admin_action = TRUE)
+            ),
+            not_ok_checklists AS (
+                SELECT DISTINCT
+                    cs.machineid,
+                    cs.frequency,
+                    CASE 
+                        WHEN cs.frequency = 'Weekly' THEN DATE_TRUNC('week', cs.submission_date::date)
+                        WHEN cs.frequency = 'Monthly' THEN DATE_TRUNC('month', cs.submission_date::date)
+                        WHEN cs.frequency = 'Yearly' THEN DATE_TRUNC('year', cs.submission_date::date)
+                        ELSE cs.submission_date::date
+                    END AS submission_date,
+                    CASE 
+                        WHEN cs.frequency = 'Daily' THEN cs.shift
+                        ELSE NULL
+                    END AS shift
+                FROM 
+                    public.checklist_submissions cs
+                JOIN public.machines m ON cs.machineid = m.machineid
+                WHERE 
+                    m.organizationid = $3
+                    AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
+                    AND (cs.maintenance_status IS NULL 
+                        OR cs.maintenance_status = 'not ok' 
+                        OR cs.user_status IS NULL 
+                        OR cs.user_status = 'not ok' 
+                        OR cs.admin_action IS NULL 
+                        OR cs.admin_action = FALSE)
             )
             -- Final summary with correct counts
             SELECT
@@ -3024,16 +3036,22 @@ async function getDashboardCount(req, res) {
                 COUNT(CASE WHEN rc.frequency = 'Daily' THEN 1 END) AS daily_total,
                 COUNT(CASE WHEN rc.frequency = 'Weekly' THEN 1 END) AS weekly_total,
                 COUNT(CASE WHEN rc.frequency = 'Monthly' THEN 1 END) AS monthly_total,
-                COUNT(CASE WHEN rc.frequency = 'Yearly' THEN 1 END) AS yearly_total
+                COUNT(CASE WHEN rc.frequency = 'Yearly' THEN 1 END) AS yearly_total,
+                COALESCE(COUNT(DISTINCT nk.submission_date), 0) AS total_not_ok_count -- Include not ok count
             FROM 
                 required_checklists rc
             LEFT JOIN 
-                submitted_checklists sc
-            ON 
-                rc.machineid = sc.machineid 
-                AND rc.frequency = sc.frequency
-                AND rc.submission_date = sc.submission_date
-                AND COALESCE(rc.shift, 'N/A') = COALESCE(sc.shift, 'N/A')
+                submitted_checklists sc ON 
+                    rc.machineid = sc.machineid 
+                    AND rc.frequency = sc.frequency
+                    AND rc.submission_date = sc.submission_date
+                    AND COALESCE(rc.shift, 'N/A') = COALESCE(sc.shift, 'N/A')
+            LEFT JOIN 
+                not_ok_checklists nk ON 
+                    rc.machineid = nk.machineid 
+                    AND rc.frequency = nk.frequency
+                    AND rc.submission_date = nk.submission_date
+                    AND COALESCE(rc.shift, 'N/A') = COALESCE(nk.shift, 'N/A')
             GROUP BY 
                 rc.machineid, rc.machinename, rc.frequency, rc.shift
             ORDER BY 
@@ -3047,97 +3065,15 @@ async function getDashboardCount(req, res) {
         }
 
         res.status(200).json(result.rows);
-
     } catch (error) {
-        console.error('Error fetching checklist summary:', error);
+        console.error('Error fetching checklist summary:', error, { organizationId, startDate, endDate });
         res.status(500).json({ message: 'Internal server error' });
-
     } finally {
         client.release();
     }
 }
 
 
-
-// async function getChecklistCountsForDate(req, res) {
-//     const { organizationId, date } = req.params; // single date input
-//     const client = await pool.connect();
-
-//     try {
-//         // Updated query with dynamic date parameter
-//         const GetChecklistCountsForDateQuery = `
-//             WITH required_checklists AS (
-//                 SELECT 
-//                     c.machineid,
-//                     m.machinename,
-//                     c.frequency,
-//                     s.shift,
-//                     COUNT(*) AS total_required_count
-//                 FROM public.checklist c
-//                 JOIN public.machines m ON c.machineid = m.machineid
-//                 LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) ON c.frequency = 'Daily' AND s.shift IS NOT NULL
-//                 WHERE c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
-//                 GROUP BY c.machineid, m.machinename, c.frequency, s.shift
-//                 UNION
-//                 SELECT 
-//                     c.machineid,
-//                     m.machinename,
-//                     c.frequency,
-//                     NULL AS shift,
-//                     COUNT(*) AS total_required_count
-//                 FROM public.checklist c
-//                 JOIN public.machines m ON c.machineid = m.machineid
-//                 WHERE c.frequency IN ('Weekly', 'Monthly', 'Yearly')
-//                 AND c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
-//                 GROUP BY c.machineid, m.machinename, c.frequency
-//             ),
-//             submitted_checklists AS (
-//                 SELECT 
-//                     cs.machineid,
-//                     c.frequency,
-//                     cs.shift,
-//                     COUNT(*) AS total_submitted_count
-//                 FROM public.checklist_submissions cs
-//                 JOIN public.checklist c ON cs.checklistid = c.checkpointid
-//                 WHERE cs.submission_date::date = $2
-//                 GROUP BY cs.machineid, c.frequency, cs.shift
-//             )
-//             SELECT 
-//                 rc.machineid,
-//                 rc.machinename,
-//                 rc.frequency,
-//                 rc.shift,
-//                 rc.total_required_count,
-//                 COALESCE(sc.total_submitted_count, 0) AS total_submitted_count,
-//                 rc.total_required_count - COALESCE(sc.total_submitted_count, 0) AS pending_count,
-//                 CASE WHEN rc.frequency = 'Daily' THEN rc.total_required_count ELSE 0 END AS daily_total,
-//                 CASE WHEN rc.frequency = 'Weekly' THEN rc.total_required_count ELSE 0 END AS weekly_total,
-//                 CASE WHEN rc.frequency = 'Monthly' THEN rc.total_required_count ELSE 0 END AS monthly_total,
-//                 CASE WHEN rc.frequency = 'Yearly' THEN rc.total_required_count ELSE 0 END AS yearly_total
-//             FROM required_checklists rc
-//             LEFT JOIN submitted_checklists sc
-//             ON rc.machineid = sc.machineid 
-//             AND rc.frequency = sc.frequency 
-//             AND rc.shift = sc.shift
-//             ORDER BY rc.machineid, rc.frequency, rc.shift;
-//         `;
-
-//         // Execute the query with parameters
-//         const result = await client.query(GetChecklistCountsForDateQuery, [organizationId, date]);
-
-//         if (result.rows.length === 0) {
-//             return res.status(404).json({ message: 'No data found for the given date' });
-//         }
-
-//         res.status(200).json(result.rows);
-
-//     } catch (error) {
-//         console.error('Error fetching checklist counts:', error);
-//         res.status(500).json({ message: 'Internal server error' });
-//     } finally {
-//         client.release();
-//     }
-// }
 async function getChecklistCountsForDate(req, res) {
     const { organizationId, date } = req.params; // single date input
     const client = await pool.connect();
