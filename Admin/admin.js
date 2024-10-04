@@ -1028,7 +1028,7 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
 // async function submission(req, res) {
 //     const {
 //         machineId,
-//         departmentId, // Might be empty or not present
+//         departmentId,
 //         checkListId,
 //         userStatus,
 //         userRemarks,
@@ -1037,13 +1037,8 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
 //         submittedBy,
 //         organizationId
 //     } = req.body;
-
 //     const submissionId = uuidv4();
-//     const uploadedImageId = uploadedImage ? uuidv4() : null; // Only generate an ID if an image is provided
-
-//     // Set default departmentId if it's not provided
-//     const defaultDepartmentId = 'b1939a2f-bdcf-45ac-9f04-1eb631a0d1e8'; // Replace with your default ID
-//     const actualDepartmentId = departmentId || defaultDepartmentId;
+//     const uploadedImageId = uuidv4(); // Image ID for the uploaded image
 
 //     let client;
 
@@ -1106,12 +1101,12 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
 //         `;
 //         await client.query(InsertSubmissionQuery, [
 //             submissionId,
-//             actualDepartmentId, // Use actualDepartmentId here
+//             departmentId,
 //             machineId,
 //             checkListId,
 //             userRemarks,
 //             actualChecklistImageId, // Set actualChecklistImageId
-//             uploadedImageId, // Insert only if an image was uploaded
+//             uploadedImageId,
 //             frequency,
 //             submittedBy,
 //             organizationId,
@@ -1160,9 +1155,6 @@ async function submission(req, res) {
     try {
         client = await pool.connect();
         await client.query('BEGIN');
-
-        // Get the current date/time in IST
-        const currentISTDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 
         // Process and save the uploaded image if provided
         let uploadedImageUrl = null;
@@ -1215,16 +1207,15 @@ async function submission(req, res) {
             (submissionid, departmentid, machineid, submission_date, checklistid, user_remarks,
             actual_checklist_imageid, uploaded_checklist_imageid, maintenance_remarks, maintenance_imageid,
             frequency, admin_action, submittedby, organizationid, user_status, maintenance_status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, $9, FALSE, $10, $11, $12, $13);
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, NULL, NULL, $8, FALSE, $9, $10, $11, $12);
         `;
         await client.query(InsertSubmissionQuery, [
             submissionId,
-            actualDepartmentId,
+            actualDepartmentId, // Use actualDepartmentId here
             machineId,
-            currentISTDate, // Use the IST formatted date
             checkListId,
             userRemarks,
-            actualChecklistImageId,
+            actualChecklistImageId, // Set actualChecklistImageId
             uploadedImageId, // Insert only if an image was uploaded
             frequency,
             submittedBy,
