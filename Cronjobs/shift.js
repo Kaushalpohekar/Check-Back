@@ -12,7 +12,7 @@ async function updateShifts() {
             UPDATE checklist_submissions
             SET shift = CASE
                 WHEN EXTRACT(HOUR FROM submission_date) >= 0.5 AND EXTRACT(HOUR FROM submission_date) < 8.5 THEN 'A'
-                WHEN EXTRACT(HOUR FROM submission_date) >= 8.5 AND EXTRACT(HOUR FROM submission_date) < 4.5 THEN 'B'
+                WHEN EXTRACT(HOUR FROM submission_date) >= 8.5 AND EXTRACT(HOUR FROM submission_date) < 16.5 THEN 'B'
                 ELSE 'C'
             END
             WHERE submission_date >= NOW() - INTERVAL '24 hours'

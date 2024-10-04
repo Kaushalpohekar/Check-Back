@@ -318,7 +318,7 @@ async function getAllMachineDetails(req, res) {
                     const mimeType = mime.lookup(row.imagename);
                     machine.machineImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    console.error('Error reading machine image:', err);
+                    //console.error('Error reading machine image:', err);
                     machine.machineImage = null; // Set to null if error occurs
                 }
             }
@@ -331,7 +331,7 @@ async function getAllMachineDetails(req, res) {
                     const mimeType = mime.lookup(row.qrname);
                     machine.qrImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    console.error('Error reading QR image:', err);
+                    //console.error('Error reading QR image:', err);
                     machine.qrImage = null; // Set to null if error occurs
                 }
             }
@@ -392,7 +392,7 @@ async function getMachineDetails(req, res) {
                     const mimeType = mime.lookup(row.imagename);
                     machine.machineImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    console.error('Error reading machine image:', err);
+                    //console.error('Error reading machine image:', err);
                     machine.machineImage = null; // Set to null if error occurs
                 }
             }
@@ -405,7 +405,7 @@ async function getMachineDetails(req, res) {
                     const mimeType = mime.lookup(row.qrname);
                     machine.qrImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    console.error('Error reading QR image:', err);
+                    //console.error('Error reading QR image:', err);
                     machine.qrImage = null; // Set to null if error occurs
                 }
             }
@@ -967,34 +967,117 @@ async function getCheckpointsByMachine(req, res) {
 }
 
 
+// async function getCheckpointsByMachineAndFrequency(req, res) {
+//     const { machineId, frequency } = req.params;
+
+//     try {
+//         // Ensure required parameters are provided
+//         if (!machineId || !frequency) {
+//             return res.status(400).json({ error: 'Machine ID and Frequency are required' });
+//         }
+
+//         const query = `
+//             SELECT 
+//                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
+//                 ci.imagename, ci.imagepath
+//             FROM 
+//                 public.checklist c
+//                 LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+//             WHERE 
+//                 c.machineid = $1 AND c.frequency = $2;
+//         `;
+
+//         const result = await pool.query(query, [machineId, frequency]);
+
+//         if (result.rows.length === 0) {
+//             return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
+//         }
+
+//         const checkpoints = result.rows.map(row => {
+//             let checkpoint = {
+//                 checkpointid: row.checkpointid,
+//                 checkpointname: row.checkpointname,
+//                 importantnote: row.importantnote,
+//                 frequency: row.frequency,
+//                 checkpointImage: null
+//             };
+
+//             // Read checkpoint image and convert to base64 if available
+//             if (row.imagepath) {
+//                 try {
+//                     const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
+//                     const base64File = fileBuffer.toString('base64');
+//                     const mimeType = mime.lookup(row.imagename);
+//                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+//                 } catch (err) {
+//                     console.error('Error reading checkpoint image:', err);
+//                     checkpoint.checkpointImage = null; // Set to null if error occurs
+//                 }
+//             }
+
+//             return checkpoint;
+//         });
+
+//         res.status(200).json(checkpoints);
+//     } catch (err) {
+//         console.error('Error fetching checkpoints:', err);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// }
+
 async function getCheckpointsByMachineAndFrequency(req, res) {
     const { machineId, frequency } = req.params;
+    const now = new Date();
 
     try {
-        // Ensure required parameters are provided
         if (!machineId || !frequency) {
-            return res.status(400).json({ error: 'Machine ID and Frequency are required' });
+            return res.status(400).json({ message: 'Machine ID and Frequency are required' });
         }
 
+        // Prepare parameters array
+        const params = [machineId];
+
+        // Define query conditions for daily, weekly, monthly, and yearly frequencies
         const query = `
             SELECT 
                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
                 ci.imagename, ci.imagepath
             FROM 
                 public.checklist c
-                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+            LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
             WHERE 
-                c.machineid = $1 AND c.frequency = $2;
+                c.machineid = $1 
+                AND c.frequency = $2
+                AND NOT EXISTS (
+                    SELECT 1 
+                    FROM public.checklist_submissions cs 
+                    WHERE 
+                        cs.machineid = c.machineid 
+                        AND cs.checklistid = c.checkpointid 
+                        AND (
+                            ($2 = 'daily' AND (
+                                (EXTRACT(HOUR FROM NOW()) BETWEEN 6 AND 14 AND cs.submission_date >= NOW()::date + INTERVAL '6 hours' AND cs.submission_date < NOW()::date + INTERVAL '14 hours') OR
+                                (EXTRACT(HOUR FROM NOW()) BETWEEN 14 AND 22 AND cs.submission_date >= NOW()::date + INTERVAL '14 hours' AND cs.submission_date < NOW()::date + INTERVAL '22 hours') OR
+                                (EXTRACT(HOUR FROM NOW()) < 6 OR EXTRACT(HOUR FROM NOW()) >= 22 AND cs.submission_date >= NOW()::date + INTERVAL '22 hours' AND cs.submission_date < NOW()::date + INTERVAL '1 day 6 hours')
+                            ))
+                            OR ($2 = 'weekly' AND cs.submission_date >= DATE_TRUNC('week', NOW()) AND cs.submission_date < (DATE_TRUNC('week', NOW()) + INTERVAL '6 days 23 hours 59 minutes 59 seconds'))
+                            OR ($2 = 'monthly' AND cs.submission_date >= DATE_TRUNC('month', NOW()) AND cs.submission_date < (DATE_TRUNC('month', NOW()) + INTERVAL '1 month - 1 second'))
+                            OR ($2 = 'yearly' AND cs.submission_date >= DATE_TRUNC('year', NOW()) AND cs.submission_date < (DATE_TRUNC('year', NOW()) + INTERVAL '1 year - 1 second'))
+                        )
+                );
         `;
 
-        const result = await pool.query(query, [machineId, frequency]);
+        // Add frequency as the second parameter
+        params.push(frequency);
+
+        const result = await pool.query(query, params);
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
+            return res.status(404).json({ message: 'Already Checklist Filled!!' });
         }
 
         const checkpoints = result.rows.map(row => {
-            let checkpoint = {
+            const checkpoint = {
                 checkpointid: row.checkpointid,
                 checkpointname: row.checkpointname,
                 importantnote: row.importantnote,
@@ -1002,16 +1085,16 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
                 checkpointImage: null
             };
 
-            // Read checkpoint image and convert to base64 if available
+            // Handling the image conversion to base64
             if (row.imagepath) {
                 try {
-                    const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
+                    const fileBuffer = fs.readFileSync('.' + row.imagepath);
                     const base64File = fileBuffer.toString('base64');
                     const mimeType = mime.lookup(row.imagename);
                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
                     console.error('Error reading checkpoint image:', err);
-                    checkpoint.checkpointImage = null; // Set to null if error occurs
+                    checkpoint.checkpointImage = null;
                 }
             }
 
@@ -1025,111 +1108,8 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
     }
 }
 
-// async function submission(req, res) {
-//     const {
-//         machineId,
-//         departmentId,
-//         checkListId,
-//         userStatus,
-//         userRemarks,
-//         uploadedImage,
-//         frequency,
-//         submittedBy,
-//         organizationId
-//     } = req.body;
-//     const submissionId = uuidv4();
-//     const uploadedImageId = uuidv4(); // Image ID for the uploaded image
 
-//     let client;
 
-//     try {
-//         client = await pool.connect();
-//         await client.query('BEGIN');
-
-//         // Process and save the uploaded image if provided
-//         let uploadedImageUrl = null;
-//         if (uploadedImage) {
-//             const base64Data = uploadedImage.split(';base64,').pop();
-//             const mimeType = uploadedImage.split(';')[0].split('/')[1];
-//             const validMimeTypes = ['jpeg', 'jpg', 'png', 'gif'];
-
-//             if (!validMimeTypes.includes(mimeType)) {
-//                 throw new Error('Unsupported image format');
-//             }
-
-//             const imageExtension = mimeType === 'jpeg' ? 'jpg' : mimeType;
-//             const imagePath = path.join('submission_images', `${uploadedImageId}.${imageExtension}`); // Relative path
-
-//             if (!fs.existsSync(path.dirname(imagePath))) {
-//                 fs.mkdirSync(path.dirname(imagePath), { recursive: true });
-//             }
-
-//             fs.writeFileSync(imagePath, base64Data, 'base64');
-
-//             uploadedImageUrl = `/submission_images/${uploadedImageId}.${imageExtension}`; // URL for accessing the image
-
-//             // Insert uploaded image information
-//             const InsertSubmissionImageQuery = `
-//                 INSERT INTO public.submission_images
-//                 (imageid, imagename, imagepath)
-//                 VALUES ($1, $2, $3);
-//             `;
-//             await client.query(InsertSubmissionImageQuery, [uploadedImageId, `${uploadedImageId}.${imageExtension}`, uploadedImageUrl]);
-//         }
-
-//         // Determine actual_checklist_imageid if checkpointId is provided
-//         let actualChecklistImageId = null;
-//         if (checkListId) {
-//             const CheckpointImageQuery = `
-//                 SELECT imageid
-//                 FROM public.checklist_images
-//                 WHERE checkpointid = $1;
-//             `;
-//             const result = await client.query(CheckpointImageQuery, [checkListId]);
-//             if (result.rows.length > 0) {
-//                 actualChecklistImageId = result.rows[0].imageid;
-//             }
-//         }
-
-//         // Insert into checklist_submissions table
-//         const InsertSubmissionQuery = `
-//             INSERT INTO public.checklist_submissions
-//             (submissionid, departmentid, machineid, submission_date, checklistid, user_remarks,
-//             actual_checklist_imageid, uploaded_checklist_imageid, maintenance_remarks, maintenance_imageid,
-//             frequency, admin_action, submittedby, organizationid, user_status, maintenance_status)
-//             VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, NULL, NULL, $8, FALSE, $9, $10, $11, $12);
-//         `;
-//         await client.query(InsertSubmissionQuery, [
-//             submissionId,
-//             departmentId,
-//             machineId,
-//             checkListId,
-//             userRemarks,
-//             actualChecklistImageId, // Set actualChecklistImageId
-//             uploadedImageId,
-//             frequency,
-//             submittedBy,
-//             organizationId,
-//             userStatus,
-//             null // maintenance_status is set to NULL by default
-//         ]);
-
-//         await client.query('COMMIT');
-//         res.status(201).json({ message: 'Submission added successfully', submissionId });
-
-//     } catch (error) {
-//         if (client) {
-//             await client.query('ROLLBACK');
-//         }
-//         console.error('Error adding submission:', error);
-//         res.status(500).json({ message: `Internal server error: ${error.message}` });
-
-//     } finally {
-//         if (client) {
-//             client.release();
-//         }
-//     }
-// }
 async function submission(req, res) {
     const {
         machineId,
@@ -1850,7 +1830,7 @@ async function getDetailedMaintenanceMyWorkDoneSubmissions(req, res) {
                         const mimeType = mime.lookup(imageName);
                         return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                     } catch (err) {
-                        console.error(`Error reading image (${imageName}):`, err);
+                        //console.error(`Error reading image (${imageName}):`, err);
                         return null;
                     }
                 }
@@ -1953,7 +1933,7 @@ async function getDetailedMaintenanceTodoSubmissions(req, res) {
                         const mimeType = mime.lookup(imageName);
                         return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                     } catch (err) {
-                        console.error(`Error reading image (${imageName}):`, err);
+                        //console.error(`Error reading image (${imageName}):`, err);
                         return null;
                     }
                 }
@@ -2122,7 +2102,7 @@ async function getSubmissionDetails(req, res) {
                     const mimeType = mime.lookup(imageName);
                     return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    console.error(`Error reading image (${imageName}):`, err);
+                    //console.error(`Error reading image (${imageName}):`, err);
                     return null;
                 }
             }
@@ -2507,7 +2487,7 @@ const fetchLatestFillSubmissions = async (req, res) => {
                     const mimeType = mime.lookup(row.user_image_name);
                     submission.userImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    console.error(`Error reading image (${row.user_image_name}):`, err);
+                    //console.error(`Error reading image (${row.user_image_name}):`, err);
                 }
             }
 
@@ -2714,7 +2694,9 @@ async function getChecklistSummary(req, res) {
                 cs.machineid,
                 cs.submission_date::date,
                 cs.shift,
-                cs.maintenance_status
+                cs.maintenance_status,
+                cs.user_status,
+                cs.admin_action
             FROM 
                 public.checklist_submissions cs
             JOIN public.machines m ON cs.machineid = m.machineid  -- Ensure organization match
@@ -2729,7 +2711,7 @@ async function getChecklistSummary(req, res) {
             COUNT(rc.checkpointid) AS required_count, -- Total checklists required for the day
             COUNT(sc.checklistid) AS submitted_count, -- Total submitted checklists for the day
             COUNT(rc.checkpointid) - COUNT(sc.checklistid) AS pending_count, -- Pending checklists
-            COUNT(CASE WHEN sc.maintenance_status IS NULL OR sc.maintenance_status = 'not ok' THEN 1 END) AS maintenance_issue_count -- Submitted but with maintenance issues
+            COUNT(CASE WHEN sc.user_status = 'not ok' OR sc.maintenance_status = 'not ok' OR admin_action = false THEN 1 END) AS maintenance_issue_count -- Submitted but with maintenance issues
         FROM 
             required_checklists rc
         LEFT JOIN 
@@ -2799,7 +2781,7 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
                     
                     return `data:${mimeType};base64,${base64File}`;
                 } catch (err) {
-                    console.error(`Error reading image (${imageName}):`, err);
+                    //console.error(`Error reading image (${imageName}):`, err);
                     return null;
                 }
             }
