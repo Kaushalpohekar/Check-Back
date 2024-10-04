@@ -3061,9 +3061,8 @@ async function getChecklistCountsForDate(req, res) {
     const client = await pool.connect();
 
     try {
-        // Updated query with dynamic date parameter and "not ok" count
         const GetChecklistCountsForDateQuery = `
-            WITH required_checklists AS (
+        WITH required_checklists AS (
                 SELECT 
                     c.machineid,
                     m.machinename,
@@ -3072,33 +3071,41 @@ async function getChecklistCountsForDate(req, res) {
                     COUNT(*) AS total_required_count
                 FROM public.checklist c
                 JOIN public.machines m ON c.machineid = m.machineid
-                LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) ON c.frequency = 'Daily' AND s.shift IS NOT NULL
+                LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) 
+                    ON c.frequency = 'Daily'  -- Only assign shifts to daily checklists
                 WHERE c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
                 GROUP BY c.machineid, m.machinename, c.frequency, s.shift
-                UNION
-                SELECT 
-                    c.machineid,
-                    m.machinename,
-                    c.frequency,
-                    NULL AS shift,
-                    COUNT(*) AS total_required_count
-                FROM public.checklist c
-                JOIN public.machines m ON c.machineid = m.machineid
-                WHERE c.frequency IN ('Weekly', 'Monthly', 'Yearly')
-                AND c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
-                GROUP BY c.machineid, m.machinename, c.frequency
             ),
             submitted_checklists AS (
                 SELECT 
                     cs.machineid,
                     c.frequency,
-                    cs.shift,
+                    CASE 
+                        -- Shift A: 6:00 to 14:00
+                        WHEN (cs.submission_date::time >= '06:00:00' AND cs.submission_date::time < '14:00:00') THEN 'A'
+                        -- Shift B: 14:00 to 22:00
+                        WHEN (cs.submission_date::time >= '14:00:00' AND cs.submission_date::time < '22:00:00') THEN 'B'
+                        -- Shift C: 22:00 to 24:00 or next day 0:00 to 6:00
+                        WHEN (cs.submission_date::time >= '22:00:00' OR cs.submission_date::time < '06:00:00') THEN 'C'
+                    END AS shift,
                     COUNT(*) AS total_submitted_count,
-                    COUNT(CASE WHEN cs.maintenance_status IS NULL OR cs.maintenance_status  = 'not ok' OR cs.user_status IS NULL OR cs.user_status = 'not ok'  OR cs.admin_action IS NULL OR cs.admin_action = FALSE THEN 1 END) AS total_not_ok_count
+                    COUNT(CASE 
+                        WHEN cs.maintenance_status IS NULL 
+                            OR cs.maintenance_status = 'not ok' 
+                            OR cs.user_status IS NULL 
+                            OR cs.user_status = 'not ok'  
+                            OR cs.admin_action IS NULL 
+                            OR cs.admin_action = FALSE 
+                        THEN 1 END) AS total_not_ok_count
                 FROM public.checklist_submissions cs
                 JOIN public.checklist c ON cs.checklistid = c.checkpointid
-                WHERE cs.submission_date::date = $2
-                GROUP BY cs.machineid, c.frequency, cs.shift
+                WHERE cs.submission_date::date = $2  -- Checkpoints submitted on the specific date
+                GROUP BY cs.machineid, c.frequency, 
+                        CASE 
+                            WHEN (cs.submission_date::time >= '06:00:00' AND cs.submission_date::time < '14:00:00') THEN 'A'
+                            WHEN (cs.submission_date::time >= '14:00:00' AND cs.submission_date::time < '22:00:00') THEN 'B'
+                            WHEN (cs.submission_date::time >= '22:00:00' OR cs.submission_date::time < '06:00:00') THEN 'C'
+                        END
             )
             SELECT 
                 rc.machineid,
@@ -3117,7 +3124,7 @@ async function getChecklistCountsForDate(req, res) {
             LEFT JOIN submitted_checklists sc
             ON rc.machineid = sc.machineid 
             AND rc.frequency = sc.frequency 
-            AND rc.shift = sc.shift
+            AND rc.shift = sc.shift  -- Match shift from required and submitted data
             ORDER BY rc.machineid, rc.frequency, rc.shift;
         `;
 
