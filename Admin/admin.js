@@ -967,117 +967,34 @@ async function getCheckpointsByMachine(req, res) {
 }
 
 
-// async function getCheckpointsByMachineAndFrequency(req, res) {
-//     const { machineId, frequency } = req.params;
-
-//     try {
-//         // Ensure required parameters are provided
-//         if (!machineId || !frequency) {
-//             return res.status(400).json({ error: 'Machine ID and Frequency are required' });
-//         }
-
-//         const query = `
-//             SELECT 
-//                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
-//                 ci.imagename, ci.imagepath
-//             FROM 
-//                 public.checklist c
-//                 LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
-//             WHERE 
-//                 c.machineid = $1 AND c.frequency = $2;
-//         `;
-
-//         const result = await pool.query(query, [machineId, frequency]);
-
-//         if (result.rows.length === 0) {
-//             return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
-//         }
-
-//         const checkpoints = result.rows.map(row => {
-//             let checkpoint = {
-//                 checkpointid: row.checkpointid,
-//                 checkpointname: row.checkpointname,
-//                 importantnote: row.importantnote,
-//                 frequency: row.frequency,
-//                 checkpointImage: null
-//             };
-
-//             // Read checkpoint image and convert to base64 if available
-//             if (row.imagepath) {
-//                 try {
-//                     const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
-//                     const base64File = fileBuffer.toString('base64');
-//                     const mimeType = mime.lookup(row.imagename);
-//                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
-//                 } catch (err) {
-//                     console.error('Error reading checkpoint image:', err);
-//                     checkpoint.checkpointImage = null; // Set to null if error occurs
-//                 }
-//             }
-
-//             return checkpoint;
-//         });
-
-//         res.status(200).json(checkpoints);
-//     } catch (err) {
-//         console.error('Error fetching checkpoints:', err);
-//         res.status(500).json({ error: 'Internal server error' });
-//     }
-// }
-
 async function getCheckpointsByMachineAndFrequency(req, res) {
     const { machineId, frequency } = req.params;
-    const now = new Date();
 
     try {
+        // Ensure required parameters are provided
         if (!machineId || !frequency) {
-            return res.status(400).json({ message: 'Machine ID and Frequency are required' });
+            return res.status(400).json({ error: 'Machine ID and Frequency are required' });
         }
 
-        // Prepare parameters array
-        const params = [machineId];
-
-        // Define query conditions for daily, weekly, monthly, and yearly frequencies
         const query = `
             SELECT 
                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
                 ci.imagename, ci.imagepath
             FROM 
                 public.checklist c
-            LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
             WHERE 
-                c.machineid = $1 
-                AND c.frequency = $2
-                AND NOT EXISTS (
-                    SELECT 1 
-                    FROM public.checklist_submissions cs 
-                    WHERE 
-                        cs.machineid = c.machineid 
-                        AND cs.checklistid = c.checkpointid 
-                        AND (
-                            ($2 = 'daily' AND (
-                                (EXTRACT(HOUR FROM NOW()) BETWEEN 6 AND 14 AND cs.submission_date >= NOW()::date + INTERVAL '6 hours' AND cs.submission_date < NOW()::date + INTERVAL '14 hours') OR
-                                (EXTRACT(HOUR FROM NOW()) BETWEEN 14 AND 22 AND cs.submission_date >= NOW()::date + INTERVAL '14 hours' AND cs.submission_date < NOW()::date + INTERVAL '22 hours') OR
-                                (EXTRACT(HOUR FROM NOW()) < 6 OR EXTRACT(HOUR FROM NOW()) >= 22 AND cs.submission_date >= NOW()::date + INTERVAL '22 hours' AND cs.submission_date < NOW()::date + INTERVAL '1 day 6 hours')
-                            ))
-                            OR ($2 = 'weekly' AND cs.submission_date >= DATE_TRUNC('week', NOW()) AND cs.submission_date < (DATE_TRUNC('week', NOW()) + INTERVAL '6 days 23 hours 59 minutes 59 seconds'))
-                            OR ($2 = 'monthly' AND cs.submission_date >= DATE_TRUNC('month', NOW()) AND cs.submission_date < (DATE_TRUNC('month', NOW()) + INTERVAL '1 month - 1 second'))
-                            OR ($2 = 'yearly' AND cs.submission_date >= DATE_TRUNC('year', NOW()) AND cs.submission_date < (DATE_TRUNC('year', NOW()) + INTERVAL '1 year - 1 second'))
-                        )
-                );
+                c.machineid = $1 AND c.frequency = $2;
         `;
 
-        // Add frequency as the second parameter
-        params.push(frequency);
-
-        const result = await pool.query(query, params);
+        const result = await pool.query(query, [machineId, frequency]);
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Already Checklist Filled!!' });
+            return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
         }
 
         const checkpoints = result.rows.map(row => {
-            const checkpoint = {
+            let checkpoint = {
                 checkpointid: row.checkpointid,
                 checkpointname: row.checkpointname,
                 importantnote: row.importantnote,
@@ -1085,16 +1002,16 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
                 checkpointImage: null
             };
 
-            // Handling the image conversion to base64
+            // Read checkpoint image and convert to base64 if available
             if (row.imagepath) {
                 try {
-                    const fileBuffer = fs.readFileSync('.' + row.imagepath);
+                    const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
                     const base64File = fileBuffer.toString('base64');
                     const mimeType = mime.lookup(row.imagename);
                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
                     console.error('Error reading checkpoint image:', err);
-                    checkpoint.checkpointImage = null;
+                    checkpoint.checkpointImage = null; // Set to null if error occurs
                 }
             }
 
@@ -1107,6 +1024,89 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
+// async function getCheckpointsByMachineAndFrequency(req, res) {
+//     const { machineId, frequency } = req.params;
+//     const now = new Date();
+
+//     try {
+//         if (!machineId || !frequency) {
+//             return res.status(400).json({ message: 'Machine ID and Frequency are required' });
+//         }
+
+//         // Prepare parameters array
+//         const params = [machineId];
+
+//         // Define query conditions for daily, weekly, monthly, and yearly frequencies
+//         const query = `
+//             SELECT 
+//                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
+//                 ci.imagename, ci.imagepath
+//             FROM 
+//                 public.checklist c
+//             LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+//             WHERE 
+//                 c.machineid = $1 
+//                 AND c.frequency = $2
+//                 AND NOT EXISTS (
+//                     SELECT 1 
+//                     FROM public.checklist_submissions cs 
+//                     WHERE 
+//                         cs.machineid = c.machineid 
+//                         AND cs.checklistid = c.checkpointid 
+//                         AND (
+//                             ($2 = 'daily' AND (
+//                                 (EXTRACT(HOUR FROM NOW()) BETWEEN 6 AND 14 AND cs.submission_date >= NOW()::date + INTERVAL '6 hours' AND cs.submission_date < NOW()::date + INTERVAL '14 hours') OR
+//                                 (EXTRACT(HOUR FROM NOW()) BETWEEN 14 AND 22 AND cs.submission_date >= NOW()::date + INTERVAL '14 hours' AND cs.submission_date < NOW()::date + INTERVAL '22 hours') OR
+//                                 (EXTRACT(HOUR FROM NOW()) < 6 OR EXTRACT(HOUR FROM NOW()) >= 22 AND cs.submission_date >= NOW()::date + INTERVAL '22 hours' AND cs.submission_date < NOW()::date + INTERVAL '1 day 6 hours')
+//                             ))
+//                             OR ($2 = 'weekly' AND cs.submission_date >= DATE_TRUNC('week', NOW()) AND cs.submission_date < (DATE_TRUNC('week', NOW()) + INTERVAL '6 days 23 hours 59 minutes 59 seconds'))
+//                             OR ($2 = 'monthly' AND cs.submission_date >= DATE_TRUNC('month', NOW()) AND cs.submission_date < (DATE_TRUNC('month', NOW()) + INTERVAL '1 month - 1 second'))
+//                             OR ($2 = 'yearly' AND cs.submission_date >= DATE_TRUNC('year', NOW()) AND cs.submission_date < (DATE_TRUNC('year', NOW()) + INTERVAL '1 year - 1 second'))
+//                         )
+//                 );
+//         `;
+
+//         // Add frequency as the second parameter
+//         params.push(frequency);
+
+//         const result = await pool.query(query, params);
+
+//         if (result.rows.length === 0) {
+//             return res.status(404).json({ message: 'Already Checklist Filled!!' });
+//         }
+
+//         const checkpoints = result.rows.map(row => {
+//             const checkpoint = {
+//                 checkpointid: row.checkpointid,
+//                 checkpointname: row.checkpointname,
+//                 importantnote: row.importantnote,
+//                 frequency: row.frequency,
+//                 checkpointImage: null
+//             };
+
+//             // Handling the image conversion to base64
+//             if (row.imagepath) {
+//                 try {
+//                     const fileBuffer = fs.readFileSync('.' + row.imagepath);
+//                     const base64File = fileBuffer.toString('base64');
+//                     const mimeType = mime.lookup(row.imagename);
+//                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+//                 } catch (err) {
+//                     console.error('Error reading checkpoint image:', err);
+//                     checkpoint.checkpointImage = null;
+//                 }
+//             }
+
+//             return checkpoint;
+//         });
+
+//         res.status(200).json(checkpoints);
+//     } catch (err) {
+//         console.error('Error fetching checkpoints:', err);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// }
 
 
 
@@ -1184,10 +1184,10 @@ async function submission(req, res) {
         // Insert into checklist_submissions table
         const InsertSubmissionQuery = `
             INSERT INTO public.checklist_submissions
-            (submissionid, departmentid, machineid, submission_date, checklistid, user_remarks,
+            (submissionid, departmentid, machineid, checklistid, user_remarks,
             actual_checklist_imageid, uploaded_checklist_imageid, maintenance_remarks, maintenance_imageid,
             frequency, admin_action, submittedby, organizationid, user_status, maintenance_status)
-            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, NULL, NULL, $8, FALSE, $9, $10, $11, $12);
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, $8, FALSE, $9, $10, $11, $12);
         `;
         await client.query(InsertSubmissionQuery, [
             submissionId,
