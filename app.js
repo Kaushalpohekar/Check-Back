@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const router = require('./routes');
-const { startCronJobs } = require('./Cronjobs/shift');
+// const { startCronJobs } = require('./Cronjobs/shift');
 
 const app = express();
 const port = 4000;
