@@ -24,7 +24,7 @@ app.get('/', (req, res) => {
   res.send('Server is running');
 });
 
-startCronJobs();
+//startCronJobs();
 
 // Start the server
 app.listen(port, () => {
