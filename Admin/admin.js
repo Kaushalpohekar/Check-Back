@@ -3176,7 +3176,7 @@ async function getChecklistCountsForDate(req, res) {
                     c.frequency,
                     cs.shift,
                     COUNT(*) AS total_submitted_count,
-                    COUNT(CASE WHEN cs.maintenance_status IS NULL OR cs.maintenance_status  = 'not ok' OR cs.user_status IS NULL OR cs.user_status = 'not ok' THEN 1 END) AS total_not_ok_count
+                    COUNT(CASE WHEN cs.maintenance_status IS NULL OR cs.maintenance_status  = 'not ok' OR cs.user_status IS NULL OR cs.user_status = 'not ok'  OR cs.admin_action IS NULL OR cs.admin_action = FALSE THEN 1 END) AS total_not_ok_count
                 FROM public.checklist_submissions cs
                 JOIN public.checklist c ON cs.checklistid = c.checkpointid
                 WHERE cs.submission_date::date = $2

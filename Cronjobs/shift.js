@@ -20,7 +20,7 @@ async function updateShifts() {
         
         await client.query(updateQuery);
         await client.query('COMMIT');
-        console.log('Shifts updated successfully');
+        console.log('Shifts updated successfully', new Date());
     } catch (error) {
         console.error('Error updating shifts:', error);
         await client.query('ROLLBACK');
