@@ -967,117 +967,34 @@ async function getCheckpointsByMachine(req, res) {
 }
 
 
-async function getCheckpointsByMachineAndFrequency(req, res) {
-    const { machineId, frequency } = req.params;
-
-    try {
-        // Ensure required parameters are provided
-        if (!machineId || !frequency) {
-            return res.status(400).json({ error: 'Machine ID and Frequency are required' });
-        }
-
-        const query = `
-            SELECT 
-                c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
-                ci.imagename, ci.imagepath
-            FROM 
-                public.checklist c
-                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
-            WHERE 
-                c.machineid = $1 AND c.frequency = $2;
-        `;
-
-        const result = await pool.query(query, [machineId, frequency]);
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
-        }
-
-        const checkpoints = result.rows.map(row => {
-            let checkpoint = {
-                checkpointid: row.checkpointid,
-                checkpointname: row.checkpointname,
-                importantnote: row.importantnote,
-                frequency: row.frequency,
-                checkpointImage: null
-            };
-
-            // Read checkpoint image and convert to base64 if available
-            if (row.imagepath) {
-                try {
-                    const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
-                    const base64File = fileBuffer.toString('base64');
-                    const mimeType = mime.lookup(row.imagename);
-                    checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
-                } catch (err) {
-                    console.error('Error reading checkpoint image:', err);
-                    checkpoint.checkpointImage = null; // Set to null if error occurs
-                }
-            }
-
-            return checkpoint;
-        });
-
-        res.status(200).json(checkpoints);
-    } catch (err) {
-        console.error('Error fetching checkpoints:', err);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-}
-
 // async function getCheckpointsByMachineAndFrequency(req, res) {
 //     const { machineId, frequency } = req.params;
-//     const now = new Date();
 
 //     try {
+//         // Ensure required parameters are provided
 //         if (!machineId || !frequency) {
-//             return res.status(400).json({ message: 'Machine ID and Frequency are required' });
+//             return res.status(400).json({ error: 'Machine ID and Frequency are required' });
 //         }
 
-//         // Prepare parameters array
-//         const params = [machineId];
-
-//         // Define query conditions for daily, weekly, monthly, and yearly frequencies
 //         const query = `
 //             SELECT 
 //                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
 //                 ci.imagename, ci.imagepath
 //             FROM 
 //                 public.checklist c
-//             LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+//                 LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
 //             WHERE 
-//                 c.machineid = $1 
-//                 AND c.frequency = $2
-//                 AND NOT EXISTS (
-//                     SELECT 1 
-//                     FROM public.checklist_submissions cs 
-//                     WHERE 
-//                         cs.machineid = c.machineid 
-//                         AND cs.checklistid = c.checkpointid 
-//                         AND (
-//                             ($2 = 'daily' AND (
-//                                 (EXTRACT(HOUR FROM NOW()) BETWEEN 6 AND 14 AND cs.submission_date >= NOW()::date + INTERVAL '6 hours' AND cs.submission_date < NOW()::date + INTERVAL '14 hours') OR
-//                                 (EXTRACT(HOUR FROM NOW()) BETWEEN 14 AND 22 AND cs.submission_date >= NOW()::date + INTERVAL '14 hours' AND cs.submission_date < NOW()::date + INTERVAL '22 hours') OR
-//                                 (EXTRACT(HOUR FROM NOW()) < 6 OR EXTRACT(HOUR FROM NOW()) >= 22 AND cs.submission_date >= NOW()::date + INTERVAL '22 hours' AND cs.submission_date < NOW()::date + INTERVAL '1 day 6 hours')
-//                             ))
-//                             OR ($2 = 'weekly' AND cs.submission_date >= DATE_TRUNC('week', NOW()) AND cs.submission_date < (DATE_TRUNC('week', NOW()) + INTERVAL '6 days 23 hours 59 minutes 59 seconds'))
-//                             OR ($2 = 'monthly' AND cs.submission_date >= DATE_TRUNC('month', NOW()) AND cs.submission_date < (DATE_TRUNC('month', NOW()) + INTERVAL '1 month - 1 second'))
-//                             OR ($2 = 'yearly' AND cs.submission_date >= DATE_TRUNC('year', NOW()) AND cs.submission_date < (DATE_TRUNC('year', NOW()) + INTERVAL '1 year - 1 second'))
-//                         )
-//                 );
+//                 c.machineid = $1 AND c.frequency = $2;
 //         `;
 
-//         // Add frequency as the second parameter
-//         params.push(frequency);
-
-//         const result = await pool.query(query, params);
+//         const result = await pool.query(query, [machineId, frequency]);
 
 //         if (result.rows.length === 0) {
-//             return res.status(404).json({ message: 'Already Checklist Filled!!' });
+//             return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
 //         }
 
 //         const checkpoints = result.rows.map(row => {
-//             const checkpoint = {
+//             let checkpoint = {
 //                 checkpointid: row.checkpointid,
 //                 checkpointname: row.checkpointname,
 //                 importantnote: row.importantnote,
@@ -1085,16 +1002,16 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
 //                 checkpointImage: null
 //             };
 
-//             // Handling the image conversion to base64
+//             // Read checkpoint image and convert to base64 if available
 //             if (row.imagepath) {
 //                 try {
-//                     const fileBuffer = fs.readFileSync('.' + row.imagepath);
+//                     const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
 //                     const base64File = fileBuffer.toString('base64');
 //                     const mimeType = mime.lookup(row.imagename);
 //                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
 //                 } catch (err) {
 //                     console.error('Error reading checkpoint image:', err);
-//                     checkpoint.checkpointImage = null;
+//                     checkpoint.checkpointImage = null; // Set to null if error occurs
 //                 }
 //             }
 
@@ -1107,6 +1024,103 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
 //         res.status(500).json({ error: 'Internal server error' });
 //     }
 // }
+
+async function getCheckpointsByMachineAndFrequency(req, res) {
+    const { machineId, frequency } = req.params;
+    const currentTime = new Date();
+    let shift = null;
+
+    try {
+        if (!machineId || !frequency) {
+            return res.status(400).json({ message: 'Machine ID and Frequency are required' });
+        }
+
+        const hours = currentTime.getHours();
+
+        if (frequency === 'Daily') {
+            if (hours >= 6 && hours < 14) {
+                shift = 'A';
+            } else if (hours >= 14 && hours < 22) {
+                shift = 'B';
+            } else {
+                shift = 'C';
+            }
+        }
+
+        let submissionQuery = `
+            SELECT 1 FROM public.checklist_submissions 
+            WHERE machineid = $1 AND frequency = $2 
+        `;
+        const queryParams = [machineId, frequency];
+
+        if (frequency === 'Daily') {
+            submissionQuery += ` AND shift = $3 AND submission_date::date = CURRENT_DATE`;
+            queryParams.push(shift);
+        } else if (frequency === 'Weekly') {
+            submissionQuery += ` AND date_part('week', submission_date) = date_part('week', CURRENT_DATE)
+                                 AND date_part('year', submission_date) = date_part('year', CURRENT_DATE)`;
+        } else if (frequency === 'Monthly') {
+            submissionQuery += ` AND date_part('month', submission_date) = date_part('month', CURRENT_DATE)
+                                 AND date_part('year', submission_date) = date_part('year', CURRENT_DATE)`;
+        } else if (frequency === 'Yearly') {
+            submissionQuery += ` AND date_part('year', submission_date) = date_part('year', CURRENT_DATE)`;
+        }
+
+        const submissionResult = await pool.query(submissionQuery, queryParams);
+
+        if (submissionResult.rows.length > 0) {
+            return res.status(400).json({ message: 'Checklist Already Filled!!' });
+        }
+
+        const checkpointQuery = `
+            SELECT 
+                c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
+                ci.imagename, ci.imagepath
+            FROM 
+                public.checklist c
+                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+            WHERE 
+                c.machineid = $1 AND c.frequency = $2;
+        `;
+
+        const checkpointResult = await pool.query(checkpointQuery, [machineId, frequency]);
+
+        if (checkpointResult.rows.length === 0) {
+            console.log('No checkpoints available for the specified machine and frequency');
+            return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
+        }
+
+        const checkpoints = checkpointResult.rows.map(row => {
+            let checkpoint = {
+                checkpointid: row.checkpointid,
+                checkpointname: row.checkpointname,
+                importantnote: row.importantnote,
+                frequency: row.frequency,
+                checkpointImage: null
+            };
+
+            if (row.imagepath) {
+                try {
+                    const fileBuffer = fs.readFileSync('.' + row.imagepath);
+                    const base64File = fileBuffer.toString('base64');
+                    const mimeType = mime.lookup(row.imagename);
+                    checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
+                } catch (err) {
+                    //console.error('Error reading checkpoint image:', err);
+                    checkpoint.checkpointImage = null;
+                }
+            }
+
+            return checkpoint;
+        });
+        res.status(200).json(checkpoints);
+    } catch (err) {
+        console.error('Error fetching checkpoints:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+
 
 
 
@@ -3061,8 +3075,9 @@ async function getChecklistCountsForDate(req, res) {
     const client = await pool.connect();
 
     try {
+        // Updated query with dynamic date parameter and "not ok" count
         const GetChecklistCountsForDateQuery = `
-        WITH required_checklists AS (
+            WITH required_checklists AS (
                 SELECT 
                     c.machineid,
                     m.machinename,
@@ -3071,41 +3086,33 @@ async function getChecklistCountsForDate(req, res) {
                     COUNT(*) AS total_required_count
                 FROM public.checklist c
                 JOIN public.machines m ON c.machineid = m.machineid
-                LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) 
-                    ON c.frequency = 'Daily'  -- Only assign shifts to daily checklists
+                LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) ON c.frequency = 'Daily' AND s.shift IS NOT NULL
                 WHERE c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
                 GROUP BY c.machineid, m.machinename, c.frequency, s.shift
+                UNION
+                SELECT 
+                    c.machineid,
+                    m.machinename,
+                    c.frequency,
+                    NULL AS shift,
+                    COUNT(*) AS total_required_count
+                FROM public.checklist c
+                JOIN public.machines m ON c.machineid = m.machineid
+                WHERE c.frequency IN ('Weekly', 'Monthly', 'Yearly')
+                AND c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
+                GROUP BY c.machineid, m.machinename, c.frequency
             ),
             submitted_checklists AS (
                 SELECT 
                     cs.machineid,
                     c.frequency,
-                    CASE 
-                        -- Shift A: 6:00 to 14:00
-                        WHEN (cs.submission_date::time >= '06:00:00' AND cs.submission_date::time < '14:00:00') THEN 'A'
-                        -- Shift B: 14:00 to 22:00
-                        WHEN (cs.submission_date::time >= '14:00:00' AND cs.submission_date::time < '22:00:00') THEN 'B'
-                        -- Shift C: 22:00 to 24:00 or next day 0:00 to 6:00
-                        WHEN (cs.submission_date::time >= '22:00:00' OR cs.submission_date::time < '06:00:00') THEN 'C'
-                    END AS shift,
+                    cs.shift,
                     COUNT(*) AS total_submitted_count,
-                    COUNT(CASE 
-                        WHEN cs.maintenance_status IS NULL 
-                            OR cs.maintenance_status = 'not ok' 
-                            OR cs.user_status IS NULL 
-                            OR cs.user_status = 'not ok'  
-                            OR cs.admin_action IS NULL 
-                            OR cs.admin_action = FALSE 
-                        THEN 1 END) AS total_not_ok_count
+                    COUNT(CASE WHEN cs.maintenance_status IS NULL OR cs.maintenance_status  = 'not ok' OR cs.user_status IS NULL OR cs.user_status = 'not ok'  OR cs.admin_action IS NULL OR cs.admin_action = FALSE THEN 1 END) AS total_not_ok_count
                 FROM public.checklist_submissions cs
                 JOIN public.checklist c ON cs.checklistid = c.checkpointid
-                WHERE cs.submission_date::date = $2  -- Checkpoints submitted on the specific date
-                GROUP BY cs.machineid, c.frequency, 
-                        CASE 
-                            WHEN (cs.submission_date::time >= '06:00:00' AND cs.submission_date::time < '14:00:00') THEN 'A'
-                            WHEN (cs.submission_date::time >= '14:00:00' AND cs.submission_date::time < '22:00:00') THEN 'B'
-                            WHEN (cs.submission_date::time >= '22:00:00' OR cs.submission_date::time < '06:00:00') THEN 'C'
-                        END
+                WHERE cs.submission_date::date = $2
+                GROUP BY cs.machineid, c.frequency, cs.shift
             )
             SELECT 
                 rc.machineid,
@@ -3124,7 +3131,7 @@ async function getChecklistCountsForDate(req, res) {
             LEFT JOIN submitted_checklists sc
             ON rc.machineid = sc.machineid 
             AND rc.frequency = sc.frequency 
-            AND rc.shift = sc.shift  -- Match shift from required and submitted data
+            AND rc.shift = sc.shift
             ORDER BY rc.machineid, rc.frequency, rc.shift;
         `;
 

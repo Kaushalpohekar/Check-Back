@@ -21,7 +21,7 @@ async function updateShifts() {
         
         const result = await client.query(updateQuery);
         await client.query('COMMIT');
-        console.log(`Shifts updated successfully: ${result.rowCount} rows at`, new Date());
+        //console.log(`Shifts updated successfully: ${result.rowCount} rows at`, new Date());
 
         if (result.rows.length > 0) {
             //console.log('Updated rows:', result.rows);
