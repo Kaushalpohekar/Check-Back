@@ -2092,7 +2092,7 @@ async function getSubmissionDetails(req, res) {
             LEFT JOIN machines m ON cs.machineid = m.machineid
             LEFT JOIN departments d ON chk.departmentid = d.departmentid
             LEFT JOIN users u ON cs.submittedby = u.userid
-            LEFT JOIN submission_images aci ON cs.actual_checklist_imageid = aci.imageid
+            LEFT JOIN checklist_images aci ON cs.actual_checklist_imageid = aci.imageid
             LEFT JOIN submission_images uci ON cs.uploaded_checklist_imageid = uci.imageid
             LEFT JOIN maintenance_images mi ON cs.maintenance_imageid = mi.imageid
             WHERE 
@@ -2106,23 +2106,22 @@ async function getSubmissionDetails(req, res) {
         }
 
         const submissionDetails = result.rows[0];
+        console.log(submissionDetails);
 
-        // Process and convert image paths to base64
         const convertImageToBase64 = (imagePath, imageName) => {
             if (imagePath) {
                 try {
-                    const fileBuffer = fs.readFileSync('.' + imagePath); // Use __dirname for relative paths
+                    const fileBuffer = fs.readFileSync('.' + imagePath);
                     const base64File = fileBuffer.toString('base64');
                     const mimeType = mime.lookup(imageName);
                     return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    //console.error(`Error reading image (${imageName}):`, err);
                     return null;
                 }
             }
             return null;
         };
-        // Convert images to base64 format
+
         submissionDetails.actual_checklist_image = convertImageToBase64(submissionDetails.actual_checklist_imagepath, submissionDetails.actual_checklist_imagename);
         submissionDetails.uploaded_checklist_image = convertImageToBase64(submissionDetails.uploaded_checklist_imagepath, submissionDetails.uploaded_checklist_imagename);
         submissionDetails.maintenance_image = convertImageToBase64(submissionDetails.maintenance_imagepath, submissionDetails.maintenance_imagename);
@@ -2134,6 +2133,7 @@ async function getSubmissionDetails(req, res) {
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
 
 async function getAllMachine(req, res) {
     const organizationId = req.params.organizationId;
