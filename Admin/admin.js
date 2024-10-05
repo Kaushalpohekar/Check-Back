@@ -1036,11 +1036,12 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
         }
 
         const hours = currentTime.getHours();
-
+        console.log(hours);
         if (frequency === 'Daily') {
-            if (hours >= 6 && hours < 14) {
+            if (hours >= 0.5 && hours < 8.5) {
                 shift = 'A';
-            } else if (hours >= 14 && hours < 22) {
+                console.log(shift);
+            } else if (hours >= 8.5 && hours < 16.5) {
                 shift = 'B';
             } else {
                 shift = 'C';
