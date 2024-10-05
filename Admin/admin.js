@@ -1043,8 +1043,10 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
                 console.log(shift);
             } else if (hours >= 8.5 && hours < 16.5) {
                 shift = 'B';
+                console.log(shift);
             } else {
                 shift = 'C';
+                console.log(shift);
             }
         }
 
