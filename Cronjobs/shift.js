@@ -9,7 +9,7 @@ async function updateShifts() {
         await client.query('BEGIN');
         
         const updateQuery = `
-            UPDATE checklist_submissions
+            UPDATE checklist.checklist_submissions
             SET shift = CASE
                 WHEN EXTRACT(HOUR FROM submission_date) >= 0.5 AND EXTRACT(HOUR FROM submission_date) < 8.5 THEN 'A'
                 WHEN EXTRACT(HOUR FROM submission_date) >= 8.5 AND EXTRACT(HOUR FROM submission_date) < 16.5 THEN 'B'

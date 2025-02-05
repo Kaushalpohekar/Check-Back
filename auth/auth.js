@@ -34,18 +34,18 @@ async function register(req, res) {
         await client.query('BEGIN');
 
         const AddOrganizationQuery = `
-            INSERT INTO public.organizations (organizationid, organizationname, address) 
+            INSERT INTO checklist.organizations (organizationid, organizationname, address) 
             VALUES($1, $2, $3);
         `;
         await client.query(AddOrganizationQuery, [organization_id, CompanyName, CompanyAddress]);
 
         const AddDepartmentQuery = `
-            INSERT INTO public.departments (departmentid, departmentname) 
+            INSERT INTO checklist.departments (departmentid, departmentname) 
             VALUES($1, $2);
         `;
         await client.query(AddDepartmentQuery, [department_id, department_name]);
 
-        const AdminUUIDQuery = `SELECT roleid FROM public.roles WHERE rolename = $1;`;
+        const AdminUUIDQuery = `SELECT roleid FROM checklist.roles WHERE rolename = $1;`;
         const roleResult = await client.query(AdminUUIDQuery, [role]);
 
         if (roleResult.rows.length === 0) {
@@ -54,7 +54,7 @@ async function register(req, res) {
 
         const role_id = roleResult.rows[0].roleid;
 
-        const CheckUserExistQuery = `SELECT * FROM public.users WHERE email = $1;`;
+        const CheckUserExistQuery = `SELECT * FROM checklist.users WHERE email = $1;`;
         const userResult = await client.query(CheckUserExistQuery, [PersonalEmail]);
 
         if (userResult.rows.length > 0) {
@@ -63,7 +63,7 @@ async function register(req, res) {
         }
 
         const InsertUserQuery = `
-            INSERT INTO public.users 
+            INSERT INTO checklist.users 
             (userid, firstname, lastname, email, contact, designation, password, organizationid, roleid, created_at, verified, blocked) 
             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, false, false);
         `;
@@ -87,7 +87,7 @@ async function register(req, res) {
 /*-------------Login-----------------*/
 async function login(req, res) {
     const { email, password } = req.body;
-    const query = `SELECT * FROM public.users WHERE email = $1`;
+    const query = `SELECT * FROM checklist.users WHERE email = $1`;
 
     try {
         const result = await db.query(query, [email]);
@@ -131,7 +131,7 @@ async function forgotPassword(req, res) {
     const { email } = req.body;
 
     try {
-        const query = 'SELECT * FROM public.users WHERE email = $1';
+        const query = 'SELECT * FROM checklist.users WHERE email = $1';
         const result = await db.query(query, [email]);
 
         if (result.rows.length === 0) {
@@ -142,7 +142,7 @@ async function forgotPassword(req, res) {
         const resetToken = jwtUtils.generateToken({ userId: result.rows[0].userid }); 
         const userId = result.rows[0].userid; 
 
-        const insertQuery = 'INSERT INTO public.reset_tokens (userid, token) VALUES ($1, $2)';
+        const insertQuery = 'INSERT INTO checklist.reset_tokens (userid, token) VALUES ($1, $2)';
         await db.query(insertQuery, [userId, resetToken]);
 
         // Uncomment and implement this function to send the reset token via email.
@@ -163,7 +163,7 @@ async function resendResetToken(req, res) {
     const { personalEmail } = req.body;
 
     try {
-        const checkUserQuery = 'SELECT * FROM public.users WHERE email = $1';
+        const checkUserQuery = 'SELECT * FROM checklist.users WHERE email = $1';
         const userResult = await db.query(checkUserQuery, [personalEmail]);
 
         if (userResult.rows.length === 0) {
@@ -173,7 +173,7 @@ async function resendResetToken(req, res) {
         const userId = userResult.rows[0].userid;
         const verificationToken = jwtUtils.generateToken({ personalEmail });
 
-        const updateQuery = 'UPDATE public.reset_tokens SET token = $1 WHERE userid = $2';
+        const updateQuery = 'UPDATE checklist.reset_tokens SET token = $1 WHERE userid = $2';
         await db.query(updateQuery, [verificationToken, userId]);
 
         //await sendResetTokenEmail(personalEmail, verificationToken);
@@ -190,7 +190,7 @@ async function resetPassword(req, res) {
     const { token, password } = req.body;
 
     try {
-        const query = 'SELECT * FROM public.reset_tokens WHERE token = $1';
+        const query = 'SELECT * FROM checklist.reset_tokens WHERE token = $1';
         const result = await db.query(query, [token]);
 
         if (result.rowCount === 0) {
@@ -202,10 +202,10 @@ async function resetPassword(req, res) {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const updateQuery = 'UPDATE public.users SET password = $1 WHERE userid = $2';
+        const updateQuery = 'UPDATE checklist.users SET password = $1 WHERE userid = $2';
         await db.query(updateQuery, [hashedPassword, userId]);
 
-        const deleteQuery = 'DELETE FROM public.swp_reset_tokens WHERE token = $1';
+        const deleteQuery = 'DELETE FROM checklist.swp_reset_tokens WHERE token = $1';
         await db.query(deleteQuery, [token]);
 
         res.status(200).json({ message: 'Password reset successful' });
@@ -268,7 +268,7 @@ async function getUserDetails(req, res) {
             return res.status(401).json({ message: 'Invalid token' });
         }
 
-        const fetchUserQuery = 'SELECT * FROM public.users WHERE userid = $1';
+        const fetchUserQuery = 'SELECT * FROM checklist.users WHERE userid = $1';
         const userResult = await db.query(fetchUserQuery, [decodedToken.userid]);
 
         if (userResult.rowCount === 0) {
@@ -276,7 +276,7 @@ async function getUserDetails(req, res) {
         }
 
         const userDetail = userResult.rows[0];
-        const fetchRoleQuery = 'SELECT * FROM public.roles WHERE roleid = $1'; // Assuming companies table and correct column names
+        const fetchRoleQuery = 'SELECT * FROM checklist.roles WHERE roleid = $1'; // Assuming companies table and correct column names
         const roleResult = await db.query(fetchRoleQuery, [userDetail.roleid]);
 
         if (roleResult.rowCount === 0) {
@@ -303,7 +303,7 @@ async function block(req, res) {
     const blockValue = action === 'block' ? 1 : 0;
 
     try {
-        const checkQuery = 'SELECT blocked FROM public.users WHERE userid = $1';
+        const checkQuery = 'SELECT blocked FROM checklist.users WHERE userid = $1';
         const checkResult = await db.query(checkQuery, [user_id]);
 
         if (checkResult.rows.length === 0) {
@@ -317,7 +317,7 @@ async function block(req, res) {
             return res.status(200).json({ message: `User is ${statusMessage}` });
         }
 
-        const updateQuery = 'UPDATE public.users SET blocked = $1 WHERE userid = $2';
+        const updateQuery = 'UPDATE checklist.users SET blocked = $1 WHERE userid = $2';
         const updateResult = await db.query(updateQuery, [blockValue, user_id]);
 
         if (updateResult.rowCount === 0) {
@@ -340,7 +340,7 @@ async function getAllTokens(req, res) {
     
     if (token === matchToken) {
         try {
-            const query = 'SELECT * FROM public.reset_tokens';
+            const query = 'SELECT * FROM checklist.reset_tokens';
             const result = await db.query(query);
 
             if (result.rowCount === 0) {
@@ -376,7 +376,7 @@ async function insertOrUpdateUserProfilePhoto(req, res) {
         // Check if user_id exists in the users table (assuming it's already validated in your middleware)
 
         // Check if user_id exists in the userprofilepictures table
-        const userProfilePhotoCheckQuery = 'SELECT 1 FROM public.userprofilepictures WHERE user_id = $1';
+        const userProfilePhotoCheckQuery = 'SELECT 1 FROM checklist.userprofilepictures WHERE user_id = $1';
         const userProfilePhotoResult = await client.query(userProfilePhotoCheckQuery, [user_id]);
 
         // Save the file to the profile folder
@@ -403,14 +403,14 @@ async function insertOrUpdateUserProfilePhoto(req, res) {
         // Insert or update the record in the userprofilepictures table
         if (userProfilePhotoResult.rowCount > 0) {
             const updatePhotoQuery = `
-                UPDATE public.userprofilepictures
+                UPDATE checklist.userprofilepictures
                 SET photo_name = $1, photo_path = $2
                 WHERE user_id = $3
             `;
             await client.query(updatePhotoQuery, [name, photoPath, user_id]);
         } else {
             const insertPhotoQuery = `
-                INSERT INTO public.userprofilepictures (user_id, photo_name, photo_path)
+                INSERT INTO checklist.userprofilepictures (user_id, photo_name, photo_path)
                 VALUES ($1, $2, $3)
             `;
             await client.query(insertPhotoQuery, [user_id, name, photoPath]);

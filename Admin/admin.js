@@ -27,7 +27,7 @@ async function addMachineDetails(req, res) {
         }
 
         const machineInsertQuery = `
-            INSERT INTO public.machines (machineid, machinename, location, description, status, organizationid)
+            INSERT INTO checklist.machines (machineid, machinename, location, description, status, organizationid)
             VALUES ($1, $2, $3, $4, $5, $6)
         `;
         await client.query(machineInsertQuery, [machineId, machineName, machinelocation, machineDescription, status, organizationId]);
@@ -44,7 +44,7 @@ async function addMachineDetails(req, res) {
         const qrImageUrl = `/qr_images/${machineId}.png`; // URL for accessing the QR code
 
         const qrInsertQuery = `
-            INSERT INTO public.qr_images (qrid, machineid, qrname, qrpath)
+            INSERT INTO checklist.qr_images (qrid, machineid, qrname, qrpath)
             VALUES ($1, $2, $3, $4)
         `;
         await client.query(qrInsertQuery, [qrId, machineId, `${machineId}.png`, qrImageUrl]);
@@ -70,7 +70,7 @@ async function addMachineDetails(req, res) {
             const machineImageUrl = `/images/${machineId}.${imageExtension}`; // URL for accessing the image
 
             const imageInsertQuery = `
-                INSERT INTO public.machine_images (imageid, machineid, imagename, imagepath)
+                INSERT INTO checklist.machine_images (imageid, machineid, imagename, imagepath)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (machineid) DO UPDATE
                 SET imagename = EXCLUDED.imagename,
@@ -108,7 +108,7 @@ async function updateMachineDetails(req, res) {
         await client.query('BEGIN');
 
         // Update machine details
-        let updateQuery = 'UPDATE public.machines SET ';
+        let updateQuery = 'UPDATE checklist.machines SET ';
         const updateValues = [];
         let index = 1;
 
@@ -142,7 +142,7 @@ async function updateMachineDetails(req, res) {
         if (machineImage) {
             // Delete existing image if exists
             const existingImageQuery = `
-                SELECT imagepath FROM public.machine_images WHERE machineid = $1
+                SELECT imagepath FROM checklist.machine_images WHERE machineid = $1
             `;
             const result = await client.query(existingImageQuery, [machineId]);
 
@@ -178,7 +178,7 @@ async function updateMachineDetails(req, res) {
 
             // Update or insert new image record
             const imageInsertQuery = `
-                INSERT INTO public.machine_images (imageid, machineid, imagename, imagepath)
+                INSERT INTO checklist.machine_images (imageid, machineid, imagename, imagepath)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (machineid) DO UPDATE
                 SET imagename = EXCLUDED.imagename,
@@ -216,10 +216,10 @@ async function deleteMachine(req, res) {
 
         // Get the image paths before deleting the records
         const imageQuery = `
-            SELECT imagepath FROM public.machine_images WHERE machineid = $1
+            SELECT imagepath FROM checklist.machine_images WHERE machineid = $1
         `;
         const qrQuery = `
-            SELECT qrpath FROM public.qr_images WHERE machineid = $1
+            SELECT qrpath FROM checklist.qr_images WHERE machineid = $1
         `;
 
         const [imageResult, qrResult] = await Promise.all([
@@ -228,11 +228,11 @@ async function deleteMachine(req, res) {
         ]);
 
         // Delete the machine record
-        await client.query('DELETE FROM public.machines WHERE machineid = $1', [machineId]);
+        await client.query('DELETE FROM checklist.machines WHERE machineid = $1', [machineId]);
 
         // Delete the related images and QR codes
-        await client.query('DELETE FROM public.machine_images WHERE machineid = $1', [machineId]);
-        await client.query('DELETE FROM public.qr_images WHERE machineid = $1', [machineId]);
+        await client.query('DELETE FROM checklist.machine_images WHERE machineid = $1', [machineId]);
+        await client.query('DELETE FROM checklist.qr_images WHERE machineid = $1', [machineId]);
 
         // Remove the image files from the filesystem
         imageResult.rows.forEach(row => {
@@ -280,9 +280,9 @@ async function getAllMachineDetails(req, res) {
                 m.machineid, m.machinename, m.location, m.description, m.status, 
                 mi.imagename, mi.imagepath, qr.qrname, qr.qrpath
             FROM 
-                machines m
-                LEFT JOIN machine_images mi ON m.machineid = mi.machineid
-                LEFT JOIN qr_images qr ON m.machineid = qr.machineid
+                checklist.machines m
+                LEFT JOIN checklist.machine_images mi ON m.machineid = mi.machineid
+                LEFT JOIN checklist.qr_images qr ON m.machineid = qr.machineid
             WHERE 
                 m.organizationid = $1;
         `;
@@ -361,9 +361,9 @@ async function getMachineDetails(req, res) {
                 m.machineid, m.machinename, m.location, m.description, m.status, 
                 mi.imagename, mi.imagepath, qr.qrname, qr.qrpath
             FROM 
-                machines m
-                LEFT JOIN machine_images mi ON m.machineid = mi.machineid
-                LEFT JOIN qr_images qr ON m.machineid = qr.machineid
+                checklist.machines m
+                LEFT JOIN checklist.machine_images mi ON m.machineid = mi.machineid
+                LEFT JOIN checklist.qr_images qr ON m.machineid = qr.machineid
             WHERE 
                 m.machineid = $1;
         `;
@@ -432,7 +432,7 @@ async function updateMachineStatus(req, res) {
         }
 
         const query = `
-            UPDATE machines
+            UPDATE checklist.machines
             SET status = $1
             WHERE machineid = $2;
         `;
@@ -471,7 +471,7 @@ async function addUser(req, res) {
     try {
         await client.query('BEGIN');
 
-        const AdminUUIDQuery = `SELECT roleid FROM public.roles WHERE rolename = $1;`;
+        const AdminUUIDQuery = `SELECT roleid FROM checklist.roles WHERE rolename = $1;`;
         const roleResult = await client.query(AdminUUIDQuery, [rolename]);
 
         if (roleResult.rows.length === 0) {
@@ -480,7 +480,7 @@ async function addUser(req, res) {
 
         const role_id = roleResult.rows[0].roleid;
 
-        const CheckUserExistQuery = `SELECT * FROM public.users WHERE email = $1;`;
+        const CheckUserExistQuery = `SELECT * FROM checklist.users WHERE email = $1;`;
         const userResult = await client.query(CheckUserExistQuery, [PersonalEmail]);
 
         if (userResult.rows.length > 0) {
@@ -489,7 +489,7 @@ async function addUser(req, res) {
         }
 
         const InsertUserQuery = `
-            INSERT INTO public.users 
+            INSERT INTO checklist.users 
             (userid, firstname, lastname, email, contact, designation, password, organizationid, roleid, created_at, verified, blocked) 
             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, true, false);
         `;
@@ -526,7 +526,7 @@ async function updateUser(req, res) {
         await client.query('BEGIN');
 
         // Fetch the role ID for the provided role name
-        const AdminUUIDQuery = `SELECT roleid FROM public.roles WHERE rolename = $1;`;
+        const AdminUUIDQuery = `SELECT roleid FROM checklist.roles WHERE rolename = $1;`;
         const roleResult = await client.query(AdminUUIDQuery, [rolename]);
 
         if (roleResult.rows.length === 0) {
@@ -537,7 +537,7 @@ async function updateUser(req, res) {
 
         // Update user details excluding email, password, and organizationId
         const UpdateUserQuery = `
-            UPDATE public.users
+            UPDATE checklist.users
             SET firstname = $1, lastname = $2, contact = $3, designation = $4, roleid = $5
             WHERE userid = $6;
         `;
@@ -582,8 +582,8 @@ async function getUserDetails(req, res) {
                 u.created_at, 
                 u.verified, 
                 u.blocked
-            FROM public.users u
-            JOIN public.roles r ON u.roleid = r.roleid
+            FROM checklist.users u
+            JOIN checklist.roles r ON u.roleid = r.roleid
             WHERE u.userid = $1;
         `;
         const result = await client.query(GetUserQuery, [userId]);
@@ -622,8 +622,8 @@ async function getUsersByOrganization(req, res) {
                 u.created_at, 
                 u.verified, 
                 u.blocked
-            FROM public.users u
-            JOIN public.roles r ON u.roleid = r.roleid
+            FROM checklist.users u
+            JOIN checklist.roles r ON u.roleid = r.roleid
             WHERE u.organizationid = $1
         `;
 
@@ -663,7 +663,7 @@ async function toggleUserBlock(req, res) {
         await client.query('BEGIN');
 
         const UpdateBlockStatusQuery = `
-            UPDATE public.users
+            UPDATE checklist.users
             SET blocked = $1
             WHERE userid = $2;
         `;
@@ -697,15 +697,15 @@ async function deleteUser(req, res) {
         await client.query('BEGIN');
 
         // Delete related data in `user_profile`
-        const DeleteUserProfileQuery = `DELETE FROM public.user_profile WHERE userid = $1;`;
+        const DeleteUserProfileQuery = `DELETE FROM checklist.user_profile WHERE userid = $1;`;
         await client.query(DeleteUserProfileQuery, [userId]);
 
         // Delete related data in `reset_tokens`
-        const DeleteResetTokensQuery = `DELETE FROM public.reset_tokens WHERE userid = $1;`;
+        const DeleteResetTokensQuery = `DELETE FROM checklist.reset_tokens WHERE userid = $1;`;
         await client.query(DeleteResetTokensQuery, [userId]);
 
         // Delete the user
-        const DeleteUserQuery = `DELETE FROM public.users WHERE userid = $1;`;
+        const DeleteUserQuery = `DELETE FROM checklist.users WHERE userid = $1;`;
         const result = await client.query(DeleteUserQuery, [userId]);
 
         if (result.rowCount === 0) {
@@ -738,7 +738,7 @@ async function addRole(req, res) {
         await client.query('BEGIN');
 
         // Check if the role already exists
-        const CheckRoleExistQuery = `SELECT * FROM public.roles WHERE rolename = $1;`;
+        const CheckRoleExistQuery = `SELECT * FROM checklist.roles WHERE rolename = $1;`;
         const roleResult = await client.query(CheckRoleExistQuery, [rolename]);
 
         if (roleResult.rows.length > 0) {
@@ -748,7 +748,7 @@ async function addRole(req, res) {
 
         // Insert the new role
         const InsertRoleQuery = `
-            INSERT INTO public.roles (roleid, rolename) 
+            INSERT INTO checklist.roles (roleid, rolename) 
             VALUES ($1, $2);
         `;
         await client.query(InsertRoleQuery, [role_id, rolename]);
@@ -787,7 +787,7 @@ async function addCheckpoint(req, res) {
 
         // Insert new checkpoint
         const InsertCheckpointQuery = `
-            INSERT INTO public.checklist
+            INSERT INTO checklist.checklist
             (checkpointid, checkpointname, importantnote, frequency, machineid, departmentid)
             VALUES ($1, $2, $3, $4, $5, $6);
         `;
@@ -823,7 +823,7 @@ async function addCheckpoint(req, res) {
 
             // Insert image information
             const InsertImageQuery = `
-                INSERT INTO public.checklist_images
+                INSERT INTO checklist.checklist_images
                 (checkpointid, imageid, imagename, imagepath)
                 VALUES ($1, $2, $3, $4);
             `;
@@ -861,8 +861,8 @@ async function getCheckpointDetails(req, res) {
                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
                 c.machineid, c.departmentid, ci.imagename, ci.imagepath
             FROM 
-                public.checklist c
-                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+                checklist.checklist c
+                LEFT JOIN checklist.checklist_images ci ON c.checkpointid = ci.checkpointid
             WHERE 
                 c.checkpointid = $1;
         `;
@@ -921,8 +921,8 @@ async function getCheckpointsByMachine(req, res) {
                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
                 ci.imagename, ci.imagepath, c.created_at
             FROM 
-                public.checklist c
-                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+                checklist.checklist c
+                LEFT JOIN checklist.checklist_images ci ON c.checkpointid = ci.checkpointid
             WHERE 
                 c.machineid = $1;
         `;
@@ -981,8 +981,8 @@ async function getCheckpointsByMachine(req, res) {
 //                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
 //                 ci.imagename, ci.imagepath
 //             FROM 
-//                 public.checklist c
-//                 LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+//                 checklist.checklist c
+//                 LEFT JOIN checklist.checklist_images ci ON c.checkpointid = ci.checkpointid
 //             WHERE 
 //                 c.machineid = $1 AND c.frequency = $2;
 //         `;
@@ -1048,7 +1048,7 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
         }
 
         let submissionQuery = `
-            SELECT 1 FROM public.checklist_submissions 
+            SELECT 1 FROM checklist.checklist_submissions 
             WHERE machineid = $1 AND frequency = $2 
         `;
         const queryParams = [machineId, frequency];
@@ -1077,8 +1077,8 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
                 ci.imagename, ci.imagepath
             FROM 
-                public.checklist c
-                LEFT JOIN public.checklist_images ci ON c.checkpointid = ci.checkpointid
+                checklist.checklist c
+                LEFT JOIN checklist.checklist_images ci ON c.checkpointid = ci.checkpointid
             WHERE 
                 c.machineid = $1 AND c.frequency = $2;
         `;
@@ -1174,7 +1174,7 @@ async function submission(req, res) {
 
             // Insert uploaded image information
             const InsertSubmissionImageQuery = `
-                INSERT INTO public.submission_images
+                INSERT INTO checklist.submission_images
                 (imageid, imagename, imagepath)
                 VALUES ($1, $2, $3);
             `;
@@ -1186,7 +1186,7 @@ async function submission(req, res) {
         if (checkListId) {
             const CheckpointImageQuery = `
                 SELECT imageid
-                FROM public.checklist_images
+                FROM checklist.checklist_images
                 WHERE checkpointid = $1;
             `;
             const result = await client.query(CheckpointImageQuery, [checkListId]);
@@ -1197,7 +1197,7 @@ async function submission(req, res) {
 
         // Insert into checklist_submissions table
         const InsertSubmissionQuery = `
-            INSERT INTO public.checklist_submissions
+            INSERT INTO checklist.checklist_submissions
             (submissionid, departmentid, machineid, checklistid, user_remarks,
             actual_checklist_imageid, uploaded_checklist_imageid, maintenance_remarks, maintenance_imageid,
             frequency, admin_action, submittedby, organizationid, user_status, maintenance_status)
@@ -1280,7 +1280,7 @@ async function updateSubmissionMaintenance(req, res) {
 
             // Insert maintenance image information
             const InsertMaintenanceImageQuery = `
-                INSERT INTO public.maintenance_images
+                INSERT INTO checklist.maintenance_images
                 (imageid, imagename, imagepath)
                 VALUES ($1, $2, $3);
             `;
@@ -1289,7 +1289,7 @@ async function updateSubmissionMaintenance(req, res) {
 
         // Update checklist submission with new values
         const UpdateSubmissionQuery = `
-            UPDATE public.checklist_submissions
+            UPDATE checklist.checklist_submissions
             SET maintenance_status = $1,
                 user_status = $1,
                 maintenance_remarks = $2,
@@ -1331,7 +1331,7 @@ async function toggleAdminStatus(req, res) {
         await client.query('BEGIN');
 
         const updateStatusQuery = `
-            UPDATE public.checklist_submissions
+            UPDATE checklist.checklist_submissions
             SET admin_action = $1
             WHERE submissionid = $2;
         `;
@@ -1384,7 +1384,7 @@ async function getCheckpointStatusCounts(req, res) {
                     WHEN frequency = 'Yearly' THEN 1 
                 END) AS yearly_count
             FROM 
-                public.checklist_submissions
+                checklist.checklist_submissions
             WHERE 
                 organizationid = $1
         `;
@@ -1399,7 +1399,7 @@ async function getCheckpointStatusCounts(req, res) {
                 frequency,
                 COUNT(*) AS done_count
             FROM
-                public.checklist_submissions
+                checklist.checklist_submissions
             WHERE
                 organizationid = $1
                 AND user_status = 'ok'
@@ -1474,9 +1474,9 @@ async function getMachineDailyCounts(req, res) {
                     THEN cs.machineid 
                 END), 0) AS doneDailyCount
             FROM
-                public.machines m
+                checklist.machines m
             LEFT JOIN
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             ON
                 m.machineid = cs.machineid
                 AND cs.frequency = 'Daily'
@@ -1524,9 +1524,9 @@ async function getMachineWeeklyCounts(req, res) {
                     THEN cs.machineid 
                 END), 0) AS doneWeeklyCount
             FROM
-                public.machines m
+                checklist.machines m
             LEFT JOIN
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             ON
                 m.machineid = cs.machineid
                 AND cs.frequency = 'Weekly'
@@ -1574,9 +1574,9 @@ async function getMachineMonthlyCounts(req, res) {
                     THEN cs.machineid 
                 END), 0) AS doneMonthlyCount
             FROM
-                public.machines m
+                checklist.machines m
             LEFT JOIN
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             ON
                 m.machineid = cs.machineid
                 AND cs.frequency = 'Monthly'
@@ -1624,9 +1624,9 @@ async function getMachineYearlyCounts(req, res) {
                     THEN cs.machineid 
                 END), 0) AS doneYearlyCount
             FROM
-                public.machines m
+                checklist.machines m
             LEFT JOIN
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             ON
                 m.machineid = cs.machineid
                 AND cs.frequency = 'Yearly'
@@ -1672,9 +1672,9 @@ async function getMaintenanceCountsByDepartment(req, res) {
                     THEN cs.submissionid 
                 END) AS doneCount
             FROM
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             JOIN
-                public.departments d
+                checklist.departments d
             ON
                 cs.departmentid = d.departmentid
             WHERE
@@ -1732,21 +1732,21 @@ async function getDetailedMaintenanceSubmissions(req, res) {
                 u.firstname || ' ' || u.lastname AS submitted_by,
                 cs.submission_date as date_time
             FROM
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             JOIN
-                public.departments d
+                checklist.departments d
             ON
                 cs.departmentid = d.departmentid
             JOIN
-                public.machines m
+                checklist.machines m
             ON
                 cs.machineid = m.machineid
             JOIN
-                public.checklist c
+                checklist.checklist c
             ON
                 cs.checklistid = c.checkpointid
             JOIN
-                public.users u
+                checklist.users u
             ON
                 cs.submittedby = u.userid
             WHERE cs.organizationid = $1;
@@ -1793,21 +1793,21 @@ async function getDetailedMaintenanceMyWorkDoneSubmissions(req, res) {
                 mi.imagename AS maintenance_image_name,
                 mi.imagepath AS maintenance_image_path
             FROM
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             JOIN
-                public.departments d ON cs.departmentid = d.departmentid
+                checklist.departments d ON cs.departmentid = d.departmentid
             JOIN
-                public.machines m ON cs.machineid = m.machineid
+                checklist.machines m ON cs.machineid = m.machineid
             JOIN
-                public.checklist c ON cs.checklistid = c.checkpointid
+                checklist.checklist c ON cs.checklistid = c.checkpointid
             JOIN
-                public.users u ON cs.submittedby = u.userid
+                checklist.users u ON cs.submittedby = u.userid
             LEFT JOIN
-                public.checklist_images ci ON cs.actual_checklist_imageid = ci.imageid
+                checklist.checklist_images ci ON cs.actual_checklist_imageid = ci.imageid
             LEFT JOIN
-                public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
+                checklist.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
             LEFT JOIN
-                public.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
+                checklist.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
             WHERE
                 cs.organizationid = $1 AND cs.maintenance_status = 'ok';
         `;
@@ -1896,21 +1896,21 @@ async function getDetailedMaintenanceTodoSubmissions(req, res) {
                 mi.imagename AS maintenance_image_name,
                 mi.imagepath AS maintenance_image_path
             FROM
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             JOIN
-                public.departments d ON cs.departmentid = d.departmentid
+                checklist.departments d ON cs.departmentid = d.departmentid
             JOIN
-                public.machines m ON cs.machineid = m.machineid
+                checklist.machines m ON cs.machineid = m.machineid
             JOIN
-                public.checklist c ON cs.checklistid = c.checkpointid
+                checklist.checklist c ON cs.checklistid = c.checkpointid
             JOIN
-                public.users u ON cs.submittedby = u.userid
+                checklist.users u ON cs.submittedby = u.userid
             LEFT JOIN
-                public.checklist_images ci ON cs.actual_checklist_imageid = ci.imageid
+                checklist.checklist_images ci ON cs.actual_checklist_imageid = ci.imageid
             LEFT JOIN
-                public.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
+                checklist.submission_images si ON cs.uploaded_checklist_imageid = si.imageid
             LEFT JOIN
-                public.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
+                checklist.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
             WHERE
                 cs.organizationid = $1 AND (cs.maintenance_status IS NULL OR cs.maintenance_status <> 'ok');
         `;
@@ -1987,13 +1987,13 @@ async function getStandardSubmissions(req, res) {
                 cs.maintenance_status,
                 cs.admin_action
             FROM
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             JOIN
-                public.departments d ON cs.departmentid = d.departmentid
+                checklist.departments d ON cs.departmentid = d.departmentid
             JOIN
-                public.machines m ON cs.machineid = m.machineid
+                checklist.machines m ON cs.machineid = m.machineid
             JOIN
-                public.checklist c ON cs.checklistid = c.checkpointid
+                checklist.checklist c ON cs.checklistid = c.checkpointid
             WHERE
                 cs.submittedby = $1;
         `;
@@ -2028,15 +2028,15 @@ async function getAdminSubmissions(req, res) {
                 cs.admin_action,
                 CONCAT(u.firstname, ' ', u.lastname) AS operator
             FROM
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             JOIN
-                public.departments d ON cs.departmentid = d.departmentid
+                checklist.departments d ON cs.departmentid = d.departmentid
             JOIN
-                public.machines m ON cs.machineid = m.machineid
+                checklist.machines m ON cs.machineid = m.machineid
             JOIN
-                public.checklist c ON cs.checklistid = c.checkpointid
+                checklist.checklist c ON cs.checklistid = c.checkpointid
             JOIN
-                public.users u ON cs.submittedby = u.userid
+                checklist.users u ON cs.submittedby = u.userid
             WHERE
                 cs.organizationid = $1;
         `;
@@ -2087,14 +2087,14 @@ async function getSubmissionDetails(req, res) {
                 mi.imagename AS maintenance_imagename, 
                 mi.imagepath AS maintenance_imagepath
             FROM 
-                checklist_submissions cs
-            LEFT JOIN checklist chk ON cs.checklistid = chk.checkpointid
-            LEFT JOIN machines m ON cs.machineid = m.machineid
-            LEFT JOIN departments d ON chk.departmentid = d.departmentid
-            LEFT JOIN users u ON cs.submittedby = u.userid
-            LEFT JOIN checklist_images aci ON cs.actual_checklist_imageid = aci.imageid
-            LEFT JOIN submission_images uci ON cs.uploaded_checklist_imageid = uci.imageid
-            LEFT JOIN maintenance_images mi ON cs.maintenance_imageid = mi.imageid
+                checklist.checklist_submissions cs
+            LEFT JOIN checklist.checklist chk ON cs.checklistid = chk.checkpointid
+            LEFT JOIN checklist.machines m ON cs.machineid = m.machineid
+            LEFT JOIN checklist.departments d ON chk.departmentid = d.departmentid
+            LEFT JOIN checklist.users u ON cs.submittedby = u.userid
+            LEFT JOIN checklist.checklist_images aci ON cs.actual_checklist_imageid = aci.imageid
+            LEFT JOIN checklist.submission_images uci ON cs.uploaded_checklist_imageid = uci.imageid
+            LEFT JOIN checklist.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
             WHERE 
                 cs.submissionid = $1;
         `;
@@ -2148,7 +2148,7 @@ async function getAllMachine(req, res) {
             SELECT 
                 machineid, machinename
             FROM 
-                machines
+                checklist.machines
             WHERE 
                 organizationid = $1;
         `;
@@ -2173,7 +2173,7 @@ async function getAllDepartments(req, res) {
             SELECT 
                 departmentid, departmentname
             FROM 
-                departments;
+                checklist.departments;
         `;
 
         const result = await pool.query(query);
@@ -2197,7 +2197,7 @@ async function getOperatorsName(req, res) {
             SELECT 
                 userid, CONCAT(u.firstname, ' ', u.lastname) AS name
             FROM 
-                users u
+                checklist.users u
             WHERE 
                 organizationid = $1
                 AND roleid NOT IN ('83745d74-cd2c-4832-8819-5f74595285e2', 'b3d036de-e44e-43d2-8bd4-dd6a0e040bc5', 'c5e201c8-5b81-459b-bd4a-1a5a31cd4542');
@@ -2231,7 +2231,7 @@ async function addDepartment(req, res) {
 
         // Insert new department
         const insertDepartmentQuery = `
-            INSERT INTO public.departments
+            INSERT INTO checklist.departments
             (departmentid, departmentname)
             VALUES ($1, $2);
         `;
@@ -2286,9 +2286,9 @@ async function addDepartment(req, res) {
 //                     THEN cs.machineid 
 //                 END), 0) AS done${frequency}Count
 //             FROM
-//                 public.machines m
+//                 checklist.machines m
 //             LEFT JOIN
-//                 public.checklist_submissions cs
+//                 checklist.checklist_submissions cs
 //             ON
 //                 m.machineid = cs.machineid
 //                 AND cs.frequency = $2
@@ -2345,9 +2345,9 @@ async function getMachineCounts(req, res) {
                         THEN cs.machineid 
                     END), 0) AS doneCount
                 FROM
-                    public.machines m
+                    checklist.machines m
                 LEFT JOIN
-                    public.checklist_submissions cs
+                    checklist.checklist_submissions cs
                 ON
                     m.machineid = cs.machineid
                     AND cs.frequency = 'Daily'
@@ -2404,9 +2404,9 @@ async function getMachineCounts(req, res) {
                         THEN cs.machineid 
                     END), 0) AS done${frequency}Count
                 FROM
-                    public.machines m
+                    checklist.machines m
                 LEFT JOIN
-                    public.checklist_submissions cs
+                    checklist.checklist_submissions cs
                 ON
                     m.machineid = cs.machineid
                     AND cs.frequency = $2
@@ -2468,13 +2468,13 @@ const fetchLatestFillSubmissions = async (req, res) => {
                 cs.maintenance_status,
                 cs.submission_date
             FROM
-                public.checklist_submissions cs
+                checklist.checklist_submissions cs
             JOIN
-                public.machines m ON cs.machineid = m.machineid
+                checklist.machines m ON cs.machineid = m.machineid
             JOIN
-                public.checklist c ON cs.checklistid = c.checkpointid
+                checklist.checklist c ON cs.checklistid = c.checkpointid
             LEFT JOIN
-                public.checklist_images si ON cs.actual_checklist_imageid = si.imageid
+                checklist.checklist_images si ON cs.actual_checklist_imageid = si.imageid
             WHERE
                 cs.organizationid = $1
                 AND DATE(cs.submission_date) = $2
@@ -2530,7 +2530,7 @@ async function getMachinesWithPendingCheckpoints(req, res) {
                 m.machineid, 
                 m.machinename
             FROM 
-                public.machines m
+                checklist.machines m
             WHERE 
                 m.organizationid = $1;
         `;
@@ -2565,9 +2565,9 @@ async function getMachinesWithPendingCheckpoints(req, res) {
                     ci.imagepath,
                     c.frequency
                 FROM 
-                    public.checklist c
+                    checklist.checklist c
                 LEFT JOIN 
-                    public.checklist_images ci 
+                    checklist.checklist_images ci 
                 ON 
                     c.checkpointid = ci.checkpointid
                 WHERE 
@@ -2602,7 +2602,7 @@ async function getMachinesWithPendingCheckpoints(req, res) {
                     SELECT 
                         1 
                     FROM 
-                        public.checklist_submissions 
+                        checklist.checklist_submissions 
                     WHERE 
                         checklistid = $1 
                         AND submission_date >= $2::timestamp - INTERVAL '${interval}'
@@ -2669,8 +2669,8 @@ async function getChecklistSummary(req, res) {
                 END AS shift,  -- Map Shift 1, 2, 3 to A, B, C
                 d.date::date AS submission_date
             FROM 
-                public.checklist c
-            JOIN public.machines m ON c.machineid = m.machineid  -- Join machines to access organizationid
+                checklist.checklist c
+            JOIN checklist.machines m ON c.machineid = m.machineid  -- Join machines to access organizationid
             CROSS JOIN (
                 -- Generate all days in the specified month
                 SELECT generate_series(
@@ -2712,8 +2712,8 @@ async function getChecklistSummary(req, res) {
                 cs.user_status,
                 cs.admin_action
             FROM 
-                public.checklist_submissions cs
-            JOIN public.machines m ON cs.machineid = m.machineid  -- Ensure organization match
+                checklist.checklist_submissions cs
+            JOIN checklist.machines m ON cs.machineid = m.machineid  -- Ensure organization match
             WHERE 
                 m.organizationid = $1
                 AND cs.submission_date >= '${year}-${month}-01'
@@ -2775,9 +2775,9 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
                 mi.imagename,
                 mi.imagepath
             FROM 
-                public.machines m
+                checklist.machines m
             LEFT JOIN
-                public.machine_images mi ON m.machineid = mi.machineid
+                checklist.machine_images mi ON m.machineid = mi.machineid
             WHERE 
                 m.organizationid = $1;
         `;
@@ -2819,7 +2819,7 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
                     c.importantnote,
                     c.frequency
                 FROM 
-                    public.checklist c
+                    checklist.checklist c
                 WHERE 
                     c.machineid = $1
             `;
@@ -2860,7 +2860,7 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
                     SELECT 
                         1 
                     FROM 
-                        public.checklist_submissions 
+                        checklist.checklist_submissions 
                     WHERE 
                         checklistid = $1 
                         AND submission_date >= $2::timestamp - INTERVAL '${interval}'
@@ -2933,8 +2933,8 @@ async function getDashboardCount(req, res) {
                         ELSE NULL
                     END AS shift
                 FROM 
-                    public.checklist c
-                JOIN public.machines m ON c.machineid = m.machineid
+                    checklist.checklist c
+                JOIN checklist.machines m ON c.machineid = m.machineid
                 CROSS JOIN LATERAL (
                     SELECT generate_series(
                         CASE 
@@ -2981,8 +2981,8 @@ async function getDashboardCount(req, res) {
                         ELSE NULL
                     END AS shift
                 FROM 
-                    public.checklist_submissions cs
-                JOIN public.machines m ON cs.machineid = m.machineid
+                    checklist.checklist_submissions cs
+                JOIN checklist.machines m ON cs.machineid = m.machineid
                 WHERE 
                     m.organizationid = $3
                     AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
@@ -3008,8 +3008,8 @@ async function getDashboardCount(req, res) {
                         ELSE NULL
                     END AS shift
                 FROM 
-                    public.checklist_submissions cs
-                JOIN public.machines m ON cs.machineid = m.machineid
+                    checklist.checklist_submissions cs
+                JOIN checklist.machines m ON cs.machineid = m.machineid
                 WHERE 
                     m.organizationid = $3
                     AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
@@ -3084,10 +3084,10 @@ async function getChecklistCountsForDate(req, res) {
                     c.frequency,
                     s.shift,
                     COUNT(*) AS total_required_count
-                FROM public.checklist c
-                JOIN public.machines m ON c.machineid = m.machineid
+                FROM checklist.checklist c
+                JOIN checklist.machines m ON c.machineid = m.machineid
                 LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) ON c.frequency = 'Daily' AND s.shift IS NOT NULL
-                WHERE c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
+                WHERE c.machineid IN (SELECT machineid FROM checklist.machines WHERE organizationid = $1)
                 GROUP BY c.machineid, m.machinename, c.frequency, s.shift
                 UNION
                 SELECT 
@@ -3096,10 +3096,10 @@ async function getChecklistCountsForDate(req, res) {
                     c.frequency,
                     NULL AS shift,
                     COUNT(*) AS total_required_count
-                FROM public.checklist c
-                JOIN public.machines m ON c.machineid = m.machineid
+                FROM checklist.checklist c
+                JOIN checklist.machines m ON c.machineid = m.machineid
                 WHERE c.frequency IN ('Weekly', 'Monthly', 'Yearly')
-                AND c.machineid IN (SELECT machineid FROM public.machines WHERE organizationid = $1)
+                AND c.machineid IN (SELECT machineid FROM checklist.machines WHERE organizationid = $1)
                 GROUP BY c.machineid, m.machinename, c.frequency
             ),
             submitted_checklists AS (
@@ -3109,8 +3109,8 @@ async function getChecklistCountsForDate(req, res) {
                     cs.shift,
                     COUNT(*) AS total_submitted_count,
                     COUNT(CASE WHEN cs.maintenance_status IS NULL OR cs.maintenance_status  = 'not ok' OR cs.user_status IS NULL OR cs.user_status = 'not ok'  OR cs.admin_action IS NULL OR cs.admin_action = FALSE THEN 1 END) AS total_not_ok_count
-                FROM public.checklist_submissions cs
-                JOIN public.checklist c ON cs.checklistid = c.checkpointid
+                FROM checklist.checklist_submissions cs
+                JOIN checklist.checklist c ON cs.checklistid = c.checkpointid
                 WHERE cs.submission_date::date = $2
                 GROUP BY cs.machineid, c.frequency, cs.shift
             )
@@ -3127,8 +3127,8 @@ async function getChecklistCountsForDate(req, res) {
                 CASE WHEN rc.frequency = 'Weekly' THEN rc.total_required_count ELSE 0 END AS weekly_total,
                 CASE WHEN rc.frequency = 'Monthly' THEN rc.total_required_count ELSE 0 END AS monthly_total,
                 CASE WHEN rc.frequency = 'Yearly' THEN rc.total_required_count ELSE 0 END AS yearly_total
-            FROM required_checklists rc
-            LEFT JOIN submitted_checklists sc
+            FROM checklist.required_checklists rc
+            LEFT JOIN checklist.submitted_checklists sc
             ON rc.machineid = sc.machineid 
             AND rc.frequency = sc.frequency 
             AND rc.shift = sc.shift
