@@ -3127,8 +3127,8 @@ async function getChecklistCountsForDate(req, res) {
                 CASE WHEN rc.frequency = 'Weekly' THEN rc.total_required_count ELSE 0 END AS weekly_total,
                 CASE WHEN rc.frequency = 'Monthly' THEN rc.total_required_count ELSE 0 END AS monthly_total,
                 CASE WHEN rc.frequency = 'Yearly' THEN rc.total_required_count ELSE 0 END AS yearly_total
-            FROM checklist.required_checklists rc
-            LEFT JOIN checklist.submitted_checklists sc
+            FROM required_checklists rc
+            LEFT JOIN submitted_checklists sc
             ON rc.machineid = sc.machineid 
             AND rc.frequency = sc.frequency 
             AND rc.shift = sc.shift
