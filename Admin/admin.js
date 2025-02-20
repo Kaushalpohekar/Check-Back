@@ -847,6 +847,117 @@ async function addCheckpoint(req, res) {
     }
 }
 
+async function updateCheckpoint(req, res) {
+    const { checkpointId } = req.params;
+    const { checkpointName, importantNote, frequency, machineId, departmentId, checkpointImage } = req.body;
+
+    let client;
+
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        const updateCheckpointQuery = `
+            UPDATE checklist.checklist
+            SET checkpointname = $1, importantnote = $2, frequency = $3, machineid = $4, departmentid = $5
+            WHERE checkpointid = $6;
+        `;
+        await client.query(updateCheckpointQuery, [
+            checkpointName,
+            importantNote,
+            frequency,
+            machineId,
+            departmentId,
+            checkpointId
+        ]);
+
+        if (checkpointImage) {
+            const base64Data = checkpointImage.split(';base64,').pop();
+            const mimeType = checkpointImage.split(';')[0].split('/')[1];
+            const validMimeTypes = ['jpeg', 'jpg', 'png', 'gif'];
+
+            if (!validMimeTypes.includes(mimeType)) {
+                throw new Error('Unsupported image format');
+            }
+
+            const imageExtension = mimeType === 'jpeg' ? 'jpg' : mimeType;
+            const imagePath = path.join('checklist_images', `${checkpointId}.${imageExtension}`); // Relative path
+
+            if (!fs.existsSync(path.dirname(imagePath))) {
+                fs.mkdirSync(path.dirname(imagePath), { recursive: true });
+            }
+
+            fs.writeFileSync(imagePath, base64Data, 'base64');
+
+            const imageUrl = `/checklist_images/${checkpointId}.${imageExtension}`;
+
+            const checkImageQuery = `SELECT imageid FROM checklist.checklist_images WHERE checkpointid = $1;`;
+            const { rows } = await client.query(checkImageQuery, [checkpointId]);
+
+            if (rows.length > 0) {
+                const updateImageQuery = `
+                    UPDATE checklist.checklist_images
+                    SET imagename = $1, imagepath = $2
+                    WHERE checkpointid = $3;
+                `;
+                await client.query(updateImageQuery, [`${checkpointId}.${imageExtension}`, imageUrl, checkpointId]);
+            } else {
+                const imageId = uuidv4();
+                const insertImageQuery = `
+                    INSERT INTO checklist.checklist_images
+                    (checkpointid, imageid, imagename, imagepath)
+                    VALUES ($1, $2, $3, $4);
+                `;
+                await client.query(insertImageQuery, [checkpointId, imageId, `${checkpointId}.${imageExtension}`, imageUrl]);
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(200).json({ message: 'Checkpoint updated successfully', checkpointId });
+
+    } catch (error) {
+        if (client) {
+            await client.query('ROLLBACK');
+        }
+        console.error('Error updating checkpoint:', error);
+        res.status(500).json({ message: `Internal server error: ${error.message}` });
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+}
+
+async function deleteCheckpoint(req, res) {
+    const { checkpointId } = req.params;
+    let client;
+
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        const deleteImageQuery = `DELETE FROM checklist.checklist_images WHERE checkpointid = $1;`;
+        await client.query(deleteImageQuery, [checkpointId]);
+
+        const deleteCheckpointQuery = `DELETE FROM checklist.checklist WHERE checkpointid = $1;`;
+        await client.query(deleteCheckpointQuery, [checkpointId]);
+
+        await client.query('COMMIT');
+        res.status(200).json({ message: 'Checkpoint deleted successfully' });
+
+    } catch (error) {
+        if (client) {
+            await client.query('ROLLBACK');
+        }
+        console.error('Error deleting checkpoint:', error);
+        res.status(500).json({ message: `Internal server error: ${error.message}` });
+    } finally {
+        if (client) {
+            client.release();
+        }
+    }
+}
+
 async function getCheckpointDetails(req, res) {
     const checkpointId = req.params.checkpointId;
 
@@ -3197,5 +3308,7 @@ module.exports = {
     getChecklistSummary,
     getMachinesWithPendingChecklistsByFrequency,
     getDashboardCount,
-    getChecklistCountsForDate
+    getChecklistCountsForDate,
+    updateCheckpoint,
+    deleteCheckpoint
 };
