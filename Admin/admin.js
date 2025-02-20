@@ -1029,7 +1029,7 @@ async function getCheckpointsByMachine(req, res) {
 
         const query = `
             SELECT 
-                c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
+                c.checkpointid, c.checkpointname, c.importantnote, c.frequency, c.machineid, c.departmentid,
                 ci.imagename, ci.imagepath, c.created_at
             FROM 
                 checklist.checklist c
@@ -1051,6 +1051,8 @@ async function getCheckpointsByMachine(req, res) {
                 importantnote: row.importantnote,
                 frequency: row.frequency,
                 date: row.created_at,
+                machineid: row.machineid,
+                departmentid: row.departmentid,
                 checkpointImage: null
             };
 
