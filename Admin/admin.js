@@ -857,6 +857,7 @@ async function updateCheckpoint(req, res) {
         client = await pool.connect();
         await client.query('BEGIN');
 
+        // Update checkpoint details
         const updateCheckpointQuery = `
             UPDATE checklist.checklist
             SET checkpointname = $1, importantnote = $2, frequency = $3, machineid = $4, departmentid = $5
@@ -871,16 +872,10 @@ async function updateCheckpoint(req, res) {
             checkpointId
         ]);
 
+        // Process and update the image if provided
         if (checkpointImage) {
             const base64Data = checkpointImage.split(';base64,').pop();
-            const mimeType = checkpointImage.split(';')[0].split('/')[1];
-            const validMimeTypes = ['jpeg', 'jpg', 'png', 'gif'];
-
-            if (!validMimeTypes.includes(mimeType)) {
-                throw new Error('Unsupported image format');
-            }
-
-            const imageExtension = mimeType === 'jpeg' ? 'jpg' : mimeType;
+            const imageExtension = checkpointImage.split(';')[0].split('/')[1] === 'jpeg' ? 'jpg' : checkpointImage.split(';')[0].split('/')[1];
             const imagePath = path.join('checklist_images', `${checkpointId}.${imageExtension}`); // Relative path
 
             if (!fs.existsSync(path.dirname(imagePath))) {
@@ -891,10 +886,12 @@ async function updateCheckpoint(req, res) {
 
             const imageUrl = `/checklist_images/${checkpointId}.${imageExtension}`;
 
+            // Check if an image already exists for this checkpoint
             const checkImageQuery = `SELECT imageid FROM checklist.checklist_images WHERE checkpointid = $1;`;
             const { rows } = await client.query(checkImageQuery, [checkpointId]);
 
             if (rows.length > 0) {
+                // Update existing image record
                 const updateImageQuery = `
                     UPDATE checklist.checklist_images
                     SET imagename = $1, imagepath = $2
@@ -902,6 +899,7 @@ async function updateCheckpoint(req, res) {
                 `;
                 await client.query(updateImageQuery, [`${checkpointId}.${imageExtension}`, imageUrl, checkpointId]);
             } else {
+                // Insert new image record if none exists
                 const imageId = uuidv4();
                 const insertImageQuery = `
                     INSERT INTO checklist.checklist_images

@@ -34,8 +34,8 @@ router.post('/addCheckpoint',authenticateUser, ad.addCheckpoint);
 router.get('/getCheckpointDetails/:checkpointId',authenticateUser, ad.getCheckpointDetails);  //done
 router.get('/getCheckpointsByMachineAndFrequency/:machineId/:frequency',authenticateUser, ad.getCheckpointsByMachineAndFrequency);  //done
 router.get('/getCheckpointsByMachine/:machineId',authenticateUser, ad.getCheckpointsByMachine);  //done
-router.put('/toggleUserBlock/:checkpointId',authenticateUser, ad.updateCheckpoint);
-router.delete('/deleteUser/:checkpointId',authenticateUser, ad.deleteCheckpoint);
+router.put('/updateCheckpoint/:checkpointId',authenticateUser, ad.updateCheckpoint);
+router.delete('/deleteCheckpoint/:checkpointId',authenticateUser, ad.deleteCheckpoint);
 
 /*----Submission-----*/
 router.post('/submission',authenticateUser, ad.submission);
