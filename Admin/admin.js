@@ -1127,7 +1127,7 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
 async function submission(req, res) {
     const {
         machineId,
-        departmentId, // Might be empty or not present
+        departmentId,
         checkListId,
         userStatus,
         userRemarks,
@@ -1138,11 +1138,16 @@ async function submission(req, res) {
     } = req.body;
 
     const submissionId = uuidv4();
-    const uploadedImageId = uploadedImage ? uuidv4() : null; // Only generate an ID if an image is provided
-
-    // Set default departmentId if it's not provided
-    const defaultDepartmentId = 'b1939a2f-bdcf-45ac-9f04-1eb631a0d1e8'; // Replace with your default ID
+    const uploadedImageId = uploadedImage ? uuidv4() : null;
+    const defaultDepartmentId = '31f88a9e-6443-4cd5-8f12-2d0f785dc19c';
     const actualDepartmentId = departmentId || defaultDepartmentId;
+    let maintenanceStatus = null;
+
+    if (actualDepartmentId === '31f88a9e-6443-4cd5-8f12-2d0f785dc19c') {
+        maintenanceStatus = 'ok';
+    } else if (actualDepartmentId === '4ee36759-fda8-44f3-9a48-4874abef16a0') {
+        maintenanceStatus = null;
+    }
 
     let client;
 
@@ -1150,7 +1155,6 @@ async function submission(req, res) {
         client = await pool.connect();
         await client.query('BEGIN');
 
-        // Process and save the uploaded image if provided
         let uploadedImageUrl = null;
         if (uploadedImage) {
             const base64Data = uploadedImage.split(';base64,').pop();
@@ -1162,17 +1166,15 @@ async function submission(req, res) {
             }
 
             const imageExtension = mimeType === 'jpeg' ? 'jpg' : mimeType;
-            const imagePath = path.join('submission_images', `${uploadedImageId}.${imageExtension}`); // Relative path
+            const imagePath = path.join('submission_images', `${uploadedImageId}.${imageExtension}`);
 
             if (!fs.existsSync(path.dirname(imagePath))) {
                 fs.mkdirSync(path.dirname(imagePath), { recursive: true });
             }
 
             fs.writeFileSync(imagePath, base64Data, 'base64');
+            uploadedImageUrl = `/submission_images/${uploadedImageId}.${imageExtension}`;
 
-            uploadedImageUrl = `/submission_images/${uploadedImageId}.${imageExtension}`; // URL for accessing the image
-
-            // Insert uploaded image information
             const InsertSubmissionImageQuery = `
                 INSERT INTO checklist.submission_images
                 (imageid, imagename, imagepath)
@@ -1181,7 +1183,6 @@ async function submission(req, res) {
             await client.query(InsertSubmissionImageQuery, [uploadedImageId, `${uploadedImageId}.${imageExtension}`, uploadedImageUrl]);
         }
 
-        // Determine actual_checklist_imageid if checkpointId is provided
         let actualChecklistImageId = null;
         if (checkListId) {
             const CheckpointImageQuery = `
@@ -1195,7 +1196,6 @@ async function submission(req, res) {
             }
         }
 
-        // Insert into checklist_submissions table
         const InsertSubmissionQuery = `
             INSERT INTO checklist.checklist_submissions
             (submissionid, departmentid, machineid, checklistid, user_remarks,
@@ -1205,17 +1205,17 @@ async function submission(req, res) {
         `;
         await client.query(InsertSubmissionQuery, [
             submissionId,
-            actualDepartmentId, // Use actualDepartmentId here
+            actualDepartmentId,
             machineId,
             checkListId,
             userRemarks,
-            actualChecklistImageId, // Set actualChecklistImageId
-            uploadedImageId, // Insert only if an image was uploaded
+            actualChecklistImageId,
+            uploadedImageId,
             frequency,
             submittedBy,
             organizationId,
             userStatus,
-            null // maintenance_status is set to NULL by default
+            maintenanceStatus
         ]);
 
         await client.query('COMMIT');
@@ -1234,8 +1234,6 @@ async function submission(req, res) {
         }
     }
 }
-
-
 
 
 async function updateSubmissionMaintenance(req, res) {
@@ -1332,7 +1330,9 @@ async function toggleAdminStatus(req, res) {
 
         const updateStatusQuery = `
             UPDATE checklist.checklist_submissions
-            SET admin_action = $1
+            SET admin_action = $1,
+            user_status = 'ok',
+            maintenance_status = 'ok'
             WHERE submissionid = $2;
         `;
         const result = await client.query(updateStatusQuery, [action, submissionId]);
@@ -1706,15 +1706,82 @@ async function getMaintenanceCountsByDepartment(req, res) {
     }
 }
 
+// async function getDetailedMaintenanceSubmissions(req, res) {
+//     const { organizationId } = req.params;
+//     let { start, end } = req.query;
+
+//     if (!organizationId) {
+//         return res.status(400).json({ error: 'Organization ID is required' });
+//     }
+
+//     if (!start || !end) {
+//         return res.status(400).json({ error: 'Start and end dates are required' });
+//     }
+
+//     try {
+//         let endDate = new Date(end);
+//         endDate.setDate(endDate.getDate() + 1);
+//         end = endDate.toISOString().split('T')[0];
+
+//         const query = `
+//             SELECT
+//                 cs.submissionid,
+//                 d.departmentname,
+//                 m.machinename,
+//                 m."location" AS machine_location,
+//                 m.description AS machine_description,
+//                 c.checkpointname,
+//                 c.importantnote,
+//                 c.frequency,
+//                 cs.user_status,
+//                 cs.maintenance_status,
+//                 cs.user_remarks,
+//                 cs.maintenance_remarks,
+//                 u.firstname || ' ' || u.lastname AS submitted_by,
+//                 cs.submission_date as date_time
+//             FROM
+//                 checklist.checklist_submissions cs
+//             JOIN
+//                 checklist.departments d ON cs.departmentid = d.departmentid
+//             JOIN
+//                 checklist.machines m ON cs.machineid = m.machineid
+//             JOIN
+//                 checklist.checklist c ON cs.checklistid = c.checkpointid
+//             JOIN
+//                 checklist.users u ON cs.submittedby = u.userid
+//             WHERE 
+//                 cs.organizationid = $1
+//                 AND cs.submission_date BETWEEN $2 AND $3;
+//         `;
+
+//         const result = await pool.query(query, [organizationId, start, end]);
+
+//         res.status(200).json(result.rows);
+//     } catch (err) {
+//         console.error('Error fetching detailed maintenance submissions with user details:', err);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// }
 async function getDetailedMaintenanceSubmissions(req, res) {
-    const organizationId = req.params.organizationId;
+    const { organizationId } = req.params;
+    let { start, end } = req.query;
+
+    // Replace with your actual UUID for the Maintenance department
+    const maintenanceDepartmentUUID = '4ee36759-fda8-44f3-9a48-4874abef16a0';
 
     if (!organizationId) {
         return res.status(400).json({ error: 'Organization ID is required' });
     }
 
+    if (!start || !end) {
+        return res.status(400).json({ error: 'Start and end dates are required' });
+    }
+
     try {
-        // SQL query to get detailed checklist submissions with user and maintenance details
+        let endDate = new Date(end);
+        endDate.setDate(endDate.getDate() + 1);
+        end = endDate.toISOString().split('T')[0];
+
         const query = `
             SELECT
                 cs.submissionid,
@@ -1734,42 +1801,54 @@ async function getDetailedMaintenanceSubmissions(req, res) {
             FROM
                 checklist.checklist_submissions cs
             JOIN
-                checklist.departments d
-            ON
-                cs.departmentid = d.departmentid
+                checklist.departments d ON cs.departmentid = d.departmentid
             JOIN
-                checklist.machines m
-            ON
-                cs.machineid = m.machineid
+                checklist.machines m ON cs.machineid = m.machineid
             JOIN
-                checklist.checklist c
-            ON
-                cs.checklistid = c.checkpointid
+                checklist.checklist c ON cs.checklistid = c.checkpointid
             JOIN
-                checklist.users u
-            ON
-                cs.submittedby = u.userid
-            WHERE cs.organizationid = $1;
+                checklist.users u ON cs.submittedby = u.userid
+            WHERE 
+                cs.organizationid = $1
+                AND cs.submission_date BETWEEN $2 AND $3
+                AND cs.departmentid = $4;
         `;
 
-        const result = await pool.query(query, [organizationId]);
+        const result = await pool.query(query, [organizationId, start, end, maintenanceDepartmentUUID]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No maintenance department submissions found' });
+        }
 
         res.status(200).json(result.rows);
     } catch (err) {
-        console.error('Error fetching detailed maintenance submissions with user details:', err);
+        console.error('Error fetching detailed maintenance submissions:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
+
 
 
 async function getDetailedMaintenanceMyWorkDoneSubmissions(req, res) {
-    const organizationId = req.params.organizationId;
+    const { organizationId } = req.params;
+    let { start, end } = req.query;
+
+    const maintenanceDepartmentUUID = '4ee36759-fda8-44f3-9a48-4874abef16a0';
 
     if (!organizationId) {
         return res.status(400).json({ error: 'Organization ID is required' });
     }
 
+    if (!start || !end) {
+        return res.status(400).json({ error: 'Start and end dates are required' });
+    }
+
     try {
+        let endDate = new Date(end);
+        endDate.setDate(endDate.getDate() + 1);
+        end = endDate.toISOString().split('T')[0];
+
         const query = `
             SELECT
                 cs.submissionid,
@@ -1809,10 +1888,17 @@ async function getDetailedMaintenanceMyWorkDoneSubmissions(req, res) {
             LEFT JOIN
                 checklist.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
             WHERE
-                cs.organizationid = $1 AND cs.maintenance_status = 'ok';
+                cs.organizationid = $1
+                AND cs.submission_date BETWEEN $2 AND $3
+                AND cs.departmentid = $4
+                AND cs.maintenance_status = 'ok';
         `;
 
-        const result = await pool.query(query, [organizationId]);
+        const result = await pool.query(query, [organizationId, start, end, maintenanceDepartmentUUID]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No maintenance department submissions found' });
+        }
 
         const submissions = result.rows.map(row => {
             const submission = {
@@ -1835,16 +1921,14 @@ async function getDetailedMaintenanceMyWorkDoneSubmissions(req, res) {
                 maintenanceImage: null
             };
 
-            // Convert images to base64
             const convertImageToBase64 = (imagePath, imageName) => {
                 if (imagePath) {
                     try {
-                        const fileBuffer = fs.readFileSync('.' + imagePath); // Use __dirname for relative paths
+                        const fileBuffer = fs.readFileSync('.' + imagePath);
                         const base64File = fileBuffer.toString('base64');
                         const mimeType = mime.lookup(imageName);
                         return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                     } catch (err) {
-                        //console.error(`Error reading image (${imageName}):`, err);
                         return null;
                     }
                 }
@@ -1860,19 +1944,31 @@ async function getDetailedMaintenanceMyWorkDoneSubmissions(req, res) {
 
         res.status(200).json(submissions);
     } catch (err) {
-        console.error('Error fetching detailed maintenance submissions with user details:', err);
+        console.error('Error fetching detailed maintenance submissions:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 }
 
+
 async function getDetailedMaintenanceTodoSubmissions(req, res) {
-    const organizationId = req.params.organizationId;
+    const { organizationId } = req.params;
+    let { start, end } = req.query;
+
+    const maintenanceDepartmentUUID = '4ee36759-fda8-44f3-9a48-4874abef16a0';
 
     if (!organizationId) {
         return res.status(400).json({ error: 'Organization ID is required' });
     }
 
+    if (!start || !end) {
+        return res.status(400).json({ error: 'Start and end dates are required' });
+    }
+
     try {
+        let endDate = new Date(end);
+        endDate.setDate(endDate.getDate() + 1);
+        end = endDate.toISOString().split('T')[0];
+
         const query = `
             SELECT
                 cs.submissionid,
@@ -1912,10 +2008,13 @@ async function getDetailedMaintenanceTodoSubmissions(req, res) {
             LEFT JOIN
                 checklist.maintenance_images mi ON cs.maintenance_imageid = mi.imageid
             WHERE
-                cs.organizationid = $1 AND (cs.maintenance_status IS NULL OR cs.maintenance_status <> 'ok');
+                cs.organizationid = $1
+                AND cs.submission_date BETWEEN $2 AND $3
+                AND cs.departmentid = $4
+                AND (cs.maintenance_status IS NULL OR cs.maintenance_status <> 'ok');
         `;
 
-        const result = await pool.query(query, [organizationId]);
+        const result = await pool.query(query, [organizationId, start, end, maintenanceDepartmentUUID]);
 
         const submissions = result.rows.map(row => {
             const submission = {
@@ -1938,16 +2037,14 @@ async function getDetailedMaintenanceTodoSubmissions(req, res) {
                 maintenanceImage: null
             };
 
-            // Convert images to base64
             const convertImageToBase64 = (imagePath, imageName) => {
                 if (imagePath) {
                     try {
-                        const fileBuffer = fs.readFileSync('.' + imagePath); // Use __dirname for relative paths
+                        const fileBuffer = fs.readFileSync('.' + imagePath);
                         const base64File = fileBuffer.toString('base64');
                         const mimeType = mime.lookup(imageName);
                         return `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                     } catch (err) {
-                        //console.error(`Error reading image (${imageName}):`, err);
                         return null;
                     }
                 }
@@ -1963,19 +2060,23 @@ async function getDetailedMaintenanceTodoSubmissions(req, res) {
 
         res.status(200).json(submissions);
     } catch (err) {
-        console.error('Error fetching detailed maintenance submissions with user details:', err);
+        console.error('Error fetching detailed maintenance submissions:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 }
 
 async function getStandardSubmissions(req, res) {
-    const userId = req.params.userId;
+    let { start, end } = req.query;
 
-    if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
+    if (!start || !end) {
+        return res.status(400).json({ error: 'Start and end dates are required' });
     }
 
     try {
+        let endDate = new Date(end);
+        endDate.setDate(endDate.getDate() + 1);
+        end = endDate.toISOString().split('T')[0];
+
         const query = `
             SELECT
                 d.departmentname,
@@ -1985,7 +2086,8 @@ async function getStandardSubmissions(req, res) {
                 cs.user_status,
                 cs.submission_date as submitted_date,
                 cs.maintenance_status,
-                cs.admin_action
+                cs.admin_action,
+                CONCAT(u.firstname, ' ', u.lastname) AS operator
             FROM
                 checklist.checklist_submissions cs
             JOIN
@@ -1994,11 +2096,13 @@ async function getStandardSubmissions(req, res) {
                 checklist.machines m ON cs.machineid = m.machineid
             JOIN
                 checklist.checklist c ON cs.checklistid = c.checkpointid
+            JOIN
+                checklist.users u ON cs.submittedby = u.userid
             WHERE
-                cs.submittedby = $1;
+                cs.submission_date BETWEEN $1 AND $2;
         `;
 
-        const result = await pool.query(query, [userId]);
+        const result = await pool.query(query, [start, end]);
 
         res.status(200).json(result.rows);
     } catch (err) {
@@ -2007,14 +2111,24 @@ async function getStandardSubmissions(req, res) {
     }
 }
 
+
 async function getAdminSubmissions(req, res) {
     const { organizationId } = req.params;
+    let { start, end } = req.query;
 
     if (!organizationId) {
         return res.status(400).json({ error: 'Organization ID is required' });
     }
 
+    if (!start || !end) {
+        return res.status(400).json({ error: 'Start and end dates are required' });
+    }
+
     try {
+        let endDate = new Date(end);
+        endDate.setDate(endDate.getDate() + 1);
+        end = endDate.toISOString().split('T')[0];
+
         const query = `
             SELECT
                 cs.submissionid,
@@ -2038,10 +2152,11 @@ async function getAdminSubmissions(req, res) {
             JOIN
                 checklist.users u ON cs.submittedby = u.userid
             WHERE
-                cs.organizationid = $1;
+                cs.organizationid = $1
+                AND cs.submission_date BETWEEN $2 AND $3
         `;
 
-        const result = await pool.query(query, [organizationId]);
+        const result = await pool.query(query, [organizationId, start, end]);
 
         res.status(200).json(result.rows);
     } catch (err) {
@@ -2049,6 +2164,8 @@ async function getAdminSubmissions(req, res) {
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
+
 
 async function getSubmissionDetails(req, res) {
     const submissionId = req.params.submissionId;

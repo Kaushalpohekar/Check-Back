@@ -50,8 +50,7 @@ router.get('/getMaintenanceCountsByDepartment/:organizationId', ad.getMaintenanc
 router.get('/getDetailedMaintenanceSubmissions/:organizationId', ad.getDetailedMaintenanceSubmissions);  //done
 router.get('/getDetailedMaintenanceMyWorkDoneSubmissions/:organizationId', ad.getDetailedMaintenanceMyWorkDoneSubmissions);  //done
 router.get('/getDetailedMaintenanceTodoSubmissions/:organizationId', ad.getDetailedMaintenanceTodoSubmissions);  //done
-router.get('/getStandardSubmissions/:userId',
-   ad.getStandardSubmissions);
+router.get('/getStandardSubmissions/:userId',ad.getStandardSubmissions);
 router.get('/getAdminSubmissions/:organizationId', ad.getAdminSubmissions);
 router.get('/getSubmissionDetails/:submissionId', ad.getSubmissionDetails);  //done
 
