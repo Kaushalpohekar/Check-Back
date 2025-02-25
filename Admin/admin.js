@@ -1056,6 +1056,7 @@ async function getCheckpointsByMachine(req, res) {
 
             // Read checkpoint image and convert to base64 if available
             if (row.imagepath) {
+                //console.log(row.imagepath);
                 try {
                     const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
                     const base64File = fileBuffer.toString('base64');
@@ -1197,7 +1198,7 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
         const checkpointResult = await pool.query(checkpointQuery, [machineId, frequency]);
 
         if (checkpointResult.rows.length === 0) {
-            console.log('No checkpoints available for the specified machine and frequency');
+            //console.log('No checkpoints available for the specified machine and frequency');
             return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
         }
 
@@ -2334,7 +2335,7 @@ async function getSubmissionDetails(req, res) {
         }
 
         const submissionDetails = result.rows[0];
-        console.log(submissionDetails);
+        //console.log(submissionDetails);
 
         const convertImageToBase64 = (imagePath, imageName) => {
             if (imagePath) {
