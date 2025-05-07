@@ -3463,11 +3463,10 @@ async function getDashboardCount(req, res) {
 
 
 async function getChecklistCountsForDate(req, res) {
-    const { organizationId, date } = req.params; // single date input
+    const { organizationId, date } = req.params;
     const client = await pool.connect();
 
     try {
-        // Updated query with dynamic date parameter and "not ok" count
         const GetChecklistCountsForDateQuery = `
             WITH required_checklists AS (
                 SELECT 
@@ -3479,9 +3478,17 @@ async function getChecklistCountsForDate(req, res) {
                 FROM checklist.checklist c
                 JOIN checklist.machines m ON c.machineid = m.machineid
                 LEFT JOIN (VALUES ('A'), ('B'), ('C')) AS s(shift) ON c.frequency = 'Daily' AND s.shift IS NOT NULL
-                WHERE c.machineid IN (SELECT machineid FROM checklist.machines WHERE organizationid = $1)
+                WHERE 
+                    c.machineid IN (
+                        SELECT machineid 
+                        FROM checklist.machines 
+                        WHERE organizationid = $1 AND status = TRUE
+                    )
+                    AND m.status = TRUE
                 GROUP BY c.machineid, m.machinename, c.frequency, s.shift
+
                 UNION
+
                 SELECT 
                     c.machineid,
                     m.machinename,
@@ -3490,8 +3497,14 @@ async function getChecklistCountsForDate(req, res) {
                     COUNT(*) AS total_required_count
                 FROM checklist.checklist c
                 JOIN checklist.machines m ON c.machineid = m.machineid
-                WHERE c.frequency IN ('Weekly', 'Monthly', 'Yearly')
-                AND c.machineid IN (SELECT machineid FROM checklist.machines WHERE organizationid = $1)
+                WHERE 
+                    c.frequency IN ('Weekly', 'Monthly', 'Yearly')
+                    AND c.machineid IN (
+                        SELECT machineid 
+                        FROM checklist.machines 
+                        WHERE organizationid = $1 AND status = TRUE
+                    )
+                    AND m.status = TRUE
                 GROUP BY c.machineid, m.machinename, c.frequency
             ),
             submitted_checklists AS (
@@ -3500,10 +3513,20 @@ async function getChecklistCountsForDate(req, res) {
                     c.frequency,
                     cs.shift,
                     COUNT(*) AS total_submitted_count,
-                    COUNT(CASE WHEN cs.maintenance_status IS NULL OR cs.maintenance_status  = 'not ok' OR cs.user_status IS NULL OR cs.user_status = 'not ok'  OR cs.admin_action IS NULL OR cs.admin_action = FALSE THEN 1 END) AS total_not_ok_count
+                    COUNT(
+                        CASE 
+                            WHEN cs.maintenance_status IS NULL OR cs.maintenance_status = 'not ok'
+                              OR cs.user_status IS NULL OR cs.user_status = 'not ok'
+                              OR cs.admin_action IS NULL OR cs.admin_action = FALSE 
+                            THEN 1 
+                        END
+                    ) AS total_not_ok_count
                 FROM checklist.checklist_submissions cs
                 JOIN checklist.checklist c ON cs.checklistid = c.checkpointid
-                WHERE cs.submission_date::date = $2
+                JOIN checklist.machines m ON cs.machineid = m.machineid
+                WHERE 
+                    cs.submission_date::date = $2
+                    AND m.status = TRUE
                 GROUP BY cs.machineid, c.frequency, cs.shift
             )
             SELECT 
@@ -3527,7 +3550,6 @@ async function getChecklistCountsForDate(req, res) {
             ORDER BY rc.machineid, rc.frequency, rc.shift;
         `;
 
-        // Execute the query with parameters
         const result = await client.query(GetChecklistCountsForDateQuery, [organizationId, date]);
 
         if (result.rows.length === 0) {
@@ -3543,6 +3565,7 @@ async function getChecklistCountsForDate(req, res) {
         client.release();
     }
 }
+
 
 
 
