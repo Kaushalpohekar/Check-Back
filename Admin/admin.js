@@ -284,7 +284,7 @@ async function getAllMachineDetails(req, res) {
                 LEFT JOIN checklist.machine_images mi ON m.machineid = mi.machineid
                 LEFT JOIN checklist.qr_images qr ON m.machineid = qr.machineid
             WHERE 
-                m.organizationid = $1;
+                m.organizationid = $1 and m.status = TRUE;
         `;
 
         const result = await pool.query(query, [organizationId]);
@@ -423,7 +423,7 @@ async function getMachineDetails(req, res) {
 /*-----------Active or Deactive the Machine--------------*/
 async function updateMachineStatus(req, res) {
     const machineId = req.params.machineId;
-    const status = req.body.status;
+    const status = req.body.block;
 
     try {
         // Ensure required parameters are provided
@@ -1923,10 +1923,10 @@ async function getDetailedMaintenanceSubmissions(req, res) {
             WHERE 
                 cs.organizationid = $1
                 AND cs.submission_date BETWEEN $2 AND $3
-                AND cs.departmentid = $4;
+                -- AND cs.departmentid = $4;
         `;
 
-        const result = await pool.query(query, [organizationId, start, end, maintenanceDepartmentUUID]);
+        const result = await pool.query(query, [organizationId, start, end]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'No maintenance department submissions found' });
@@ -2681,9 +2681,9 @@ const fetchLatestFillSubmissions = async (req, res) => {
         let statusCondition = '';
 
         if (status === 'completed') {
-            statusCondition = `AND cs.user_status = 'ok' AND cs.maintenance_status = 'ok'`;
+            statusCondition = `AND cs.user_status = 'ok' AND cs.maintenance_status = 'ok' AND cs.admin_action = TRUE`;
         } else if (status === 'pending') {
-            statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok')`;
+            statusCondition = `AND (cs.user_status IS NULL OR cs.maintenance_status IS NULL OR cs.user_status != 'ok' OR cs.maintenance_status != 'ok' OR cs.admin_action IS NULL OR cs.admin_action = FALSE)`;
         }
 
         const query = `
@@ -2899,7 +2899,7 @@ async function getChecklistSummary(req, res) {
                 d.date::date AS submission_date
             FROM 
                 checklist.checklist c
-            JOIN checklist.machines m ON c.machineid = m.machineid  -- Join machines to access organizationid
+            JOIN checklist.machines m ON c.machineid = m.machineid AND m.status = TRUE -- Join machines to access organizationid
             CROSS JOIN (
                 -- Generate all days in the specified month
                 SELECT generate_series(
@@ -2942,7 +2942,7 @@ async function getChecklistSummary(req, res) {
                 cs.admin_action
             FROM 
                 checklist.checklist_submissions cs
-            JOIN checklist.machines m ON cs.machineid = m.machineid  -- Ensure organization match
+            JOIN checklist.machines m ON cs.machineid = m.machineid  AND m.status = TRUE -- Ensure organization match
             WHERE 
                 m.organizationid = $1
                 AND cs.submission_date >= '${year}-${month}-01'
@@ -3008,7 +3008,7 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
             LEFT JOIN
                 checklist.machine_images mi ON m.machineid = mi.machineid
             WHERE 
-                m.organizationid = $1;
+                m.organizationid = $1 AND m.status = TRUE;
         `;
         const machineResult = await pool.query(machineQuery, [organizationId]);
         const machines = machineResult.rows;
@@ -3137,6 +3137,166 @@ async function getMachinesWithPendingChecklistsByFrequency(req, res) {
 }
 
 
+// async function getDashboardCount(req, res) {
+//     const { organizationId, startDate, endDate } = req.params;
+
+//     // Parameter validation
+//     if (!organizationId || !startDate || !endDate) {
+//         return res.status(400).json({ message: 'Invalid parameters' });
+//     }
+
+//     const client = await pool.connect();
+
+//     try {
+//         const GetChecklistSummaryQuery = `
+//             WITH required_checklists AS (
+//                 -- Generate required checklists for each machine and frequency within the date range
+//                 SELECT 
+//                     c.machineid,
+//                     m.machinename,
+//                     c.frequency,
+//                     COUNT(DISTINCT c.checkpointid) AS checkpoint_count,
+//                     gs.submission_date,
+//                     CASE 
+//                         WHEN c.frequency = 'Daily' THEN s.shift
+//                         ELSE NULL
+//                     END AS shift
+//                 FROM 
+//                     checklist.checklist c
+//                 JOIN checklist.machines m ON c.machineid = m.machineid
+//                 CROSS JOIN LATERAL (
+//                     SELECT generate_series(
+//                         CASE 
+//                             WHEN c.frequency = 'Daily' THEN $1::date
+//                             WHEN c.frequency = 'Weekly' THEN DATE_TRUNC('week', $1::date)
+//                             WHEN c.frequency = 'Monthly' THEN DATE_TRUNC('month', $1::date)
+//                             WHEN c.frequency = 'Yearly' THEN DATE_TRUNC('year', $1::date)
+//                         END,
+//                         CASE 
+//                             WHEN c.frequency = 'Daily' THEN $2::date
+//                             WHEN c.frequency = 'Weekly' THEN DATE_TRUNC('week', $2::date) + INTERVAL '6 days'
+//                             WHEN c.frequency = 'Monthly' THEN DATE_TRUNC('month', $2::date) + INTERVAL '1 month' - INTERVAL '1 day'
+//                             WHEN c.frequency = 'Yearly' THEN DATE_TRUNC('year', $2::date) + INTERVAL '1 year' - INTERVAL '1 day'
+//                         END,
+//                         CASE 
+//                             WHEN c.frequency = 'Daily' THEN INTERVAL '1 day'
+//                             WHEN c.frequency = 'Weekly' THEN INTERVAL '1 week'
+//                             WHEN c.frequency = 'Monthly' THEN INTERVAL '1 month'
+//                             WHEN c.frequency = 'Yearly' THEN INTERVAL '1 year'
+//                         END
+//                     ) AS submission_date
+//                 ) gs
+//                 LEFT JOIN LATERAL (
+//                     SELECT unnest(ARRAY['A', 'B', 'C']) AS shift
+//                 ) s ON c.frequency = 'Daily'
+//                 WHERE 
+//                     m.organizationid = $3
+//                 GROUP BY 
+//                     c.machineid, m.machinename, c.frequency, gs.submission_date, s.shift
+//             ),
+//             submitted_checklists AS (
+//                 -- Get distinct checklist submissions (1 per machine, frequency, shift, and submission date)
+//                 SELECT DISTINCT
+//                     cs.machineid,
+//                     cs.frequency,
+//                     CASE 
+//                         WHEN cs.frequency = 'Weekly' THEN DATE_TRUNC('week', cs.submission_date::date)
+//                         WHEN cs.frequency = 'Monthly' THEN DATE_TRUNC('month', cs.submission_date::date)
+//                         WHEN cs.frequency = 'Yearly' THEN DATE_TRUNC('year', cs.submission_date::date)
+//                         ELSE cs.submission_date::date
+//                     END AS submission_date,
+//                     CASE 
+//                         WHEN cs.frequency = 'Daily' THEN cs.shift
+//                         ELSE NULL
+//                     END AS shift
+//                 FROM 
+//                     checklist.checklist_submissions cs
+//                 JOIN checklist.machines m ON cs.machineid = m.machineid
+//                 WHERE 
+//                     m.organizationid = $3
+//                     AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
+//                     AND (cs.maintenance_status IS NOT NULL 
+//                         OR cs.maintenance_status = 'ok' 
+//                         OR cs.user_status IS NOT NULL 
+//                         OR cs.user_status = 'ok' 
+//                         OR cs.admin_action IS NULL 
+//                         OR cs.admin_action = TRUE)
+//             ),
+//             not_ok_checklists AS (
+//                 SELECT DISTINCT
+//                     cs.machineid,
+//                     cs.frequency,
+//                     CASE 
+//                         WHEN cs.frequency = 'Weekly' THEN DATE_TRUNC('week', cs.submission_date::date)
+//                         WHEN cs.frequency = 'Monthly' THEN DATE_TRUNC('month', cs.submission_date::date)
+//                         WHEN cs.frequency = 'Yearly' THEN DATE_TRUNC('year', cs.submission_date::date)
+//                         ELSE cs.submission_date::date
+//                     END AS submission_date,
+//                     CASE 
+//                         WHEN cs.frequency = 'Daily' THEN cs.shift
+//                         ELSE NULL
+//                     END AS shift
+//                 FROM 
+//                     checklist.checklist_submissions cs
+//                 JOIN checklist.machines m ON cs.machineid = m.machineid
+//                 WHERE 
+//                     m.organizationid = $3
+//                     AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
+//                     AND (cs.maintenance_status IS NULL 
+//                         OR cs.maintenance_status = 'not ok' 
+//                         OR cs.user_status IS NULL 
+//                         OR cs.user_status = 'not ok' 
+//                         OR cs.admin_action IS NULL 
+//                         OR cs.admin_action = FALSE)
+//             )
+//             -- Final summary with correct counts
+//             SELECT
+//                 rc.machineid,
+//                 rc.machinename,
+//                 rc.frequency,
+//                 rc.shift,
+//                 COUNT(DISTINCT rc.submission_date) AS total_required_count,
+//                 COALESCE(COUNT(DISTINCT sc.submission_date), 0) AS total_submitted_count,
+//                 COUNT(DISTINCT rc.submission_date) - COALESCE(COUNT(DISTINCT sc.submission_date), 0) AS pending_count,
+//                 COUNT(CASE WHEN rc.frequency = 'Daily' THEN 1 END) AS daily_total,
+//                 COUNT(CASE WHEN rc.frequency = 'Weekly' THEN 1 END) AS weekly_total,
+//                 COUNT(CASE WHEN rc.frequency = 'Monthly' THEN 1 END) AS monthly_total,
+//                 COUNT(CASE WHEN rc.frequency = 'Yearly' THEN 1 END) AS yearly_total,
+//                 COALESCE(COUNT(DISTINCT nk.submission_date), 0) AS total_not_ok_count -- Include not ok count
+//             FROM 
+//                 required_checklists rc
+//             LEFT JOIN 
+//                 submitted_checklists sc ON 
+//                     rc.machineid = sc.machineid 
+//                     AND rc.frequency = sc.frequency
+//                     AND rc.submission_date = sc.submission_date
+//                     AND COALESCE(rc.shift, 'N/A') = COALESCE(sc.shift, 'N/A')
+//             LEFT JOIN 
+//                 not_ok_checklists nk ON 
+//                     rc.machineid = nk.machineid 
+//                     AND rc.frequency = nk.frequency
+//                     AND rc.submission_date = nk.submission_date
+//                     AND COALESCE(rc.shift, 'N/A') = COALESCE(nk.shift, 'N/A')
+//             GROUP BY 
+//                 rc.machineid, rc.machinename, rc.frequency, rc.shift
+//             ORDER BY 
+//                 rc.machineid, rc.frequency, rc.shift;
+//         `;
+
+//         const result = await client.query(GetChecklistSummaryQuery, [startDate, endDate, organizationId]);
+
+//         if (result.rows.length === 0) {
+//             return res.status(404).json({ message: 'No data found' });
+//         }
+
+//         res.status(200).json(result.rows);
+//     } catch (error) {
+//         console.error('Error fetching checklist summary:', error, { organizationId, startDate, endDate });
+//         res.status(500).json({ message: 'Internal server error' });
+//     } finally {
+//         client.release();
+//     }
+// }
 async function getDashboardCount(req, res) {
     const { organizationId, startDate, endDate } = req.params;
 
@@ -3150,7 +3310,6 @@ async function getDashboardCount(req, res) {
     try {
         const GetChecklistSummaryQuery = `
             WITH required_checklists AS (
-                -- Generate required checklists for each machine and frequency within the date range
                 SELECT 
                     c.machineid,
                     m.machinename,
@@ -3163,7 +3322,10 @@ async function getDashboardCount(req, res) {
                     END AS shift
                 FROM 
                     checklist.checklist c
-                JOIN checklist.machines m ON c.machineid = m.machineid
+                JOIN checklist.machines m 
+                    ON c.machineid = m.machineid 
+                    AND m.organizationid = $3 
+                    AND m.status = TRUE
                 CROSS JOIN LATERAL (
                     SELECT generate_series(
                         CASE 
@@ -3189,13 +3351,10 @@ async function getDashboardCount(req, res) {
                 LEFT JOIN LATERAL (
                     SELECT unnest(ARRAY['A', 'B', 'C']) AS shift
                 ) s ON c.frequency = 'Daily'
-                WHERE 
-                    m.organizationid = $3
                 GROUP BY 
                     c.machineid, m.machinename, c.frequency, gs.submission_date, s.shift
             ),
             submitted_checklists AS (
-                -- Get distinct checklist submissions (1 per machine, frequency, shift, and submission date)
                 SELECT DISTINCT
                     cs.machineid,
                     cs.frequency,
@@ -3211,10 +3370,12 @@ async function getDashboardCount(req, res) {
                     END AS shift
                 FROM 
                     checklist.checklist_submissions cs
-                JOIN checklist.machines m ON cs.machineid = m.machineid
+                JOIN checklist.machines m 
+                    ON cs.machineid = m.machineid 
+                    AND m.organizationid = $3 
+                    AND m.status = TRUE
                 WHERE 
-                    m.organizationid = $3
-                    AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
+                    cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
                     AND (cs.maintenance_status IS NOT NULL 
                         OR cs.maintenance_status = 'ok' 
                         OR cs.user_status IS NOT NULL 
@@ -3238,10 +3399,12 @@ async function getDashboardCount(req, res) {
                     END AS shift
                 FROM 
                     checklist.checklist_submissions cs
-                JOIN checklist.machines m ON cs.machineid = m.machineid
+                JOIN checklist.machines m 
+                    ON cs.machineid = m.machineid 
+                    AND m.organizationid = $3 
+                    AND m.status = TRUE
                 WHERE 
-                    m.organizationid = $3
-                    AND cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
+                    cs.submission_date BETWEEN $1::date AND ($2::date + interval '1 day')
                     AND (cs.maintenance_status IS NULL 
                         OR cs.maintenance_status = 'not ok' 
                         OR cs.user_status IS NULL 
@@ -3249,7 +3412,6 @@ async function getDashboardCount(req, res) {
                         OR cs.admin_action IS NULL 
                         OR cs.admin_action = FALSE)
             )
-            -- Final summary with correct counts
             SELECT
                 rc.machineid,
                 rc.machinename,
@@ -3262,21 +3424,21 @@ async function getDashboardCount(req, res) {
                 COUNT(CASE WHEN rc.frequency = 'Weekly' THEN 1 END) AS weekly_total,
                 COUNT(CASE WHEN rc.frequency = 'Monthly' THEN 1 END) AS monthly_total,
                 COUNT(CASE WHEN rc.frequency = 'Yearly' THEN 1 END) AS yearly_total,
-                COALESCE(COUNT(DISTINCT nk.submission_date), 0) AS total_not_ok_count -- Include not ok count
+                COALESCE(COUNT(DISTINCT nk.submission_date), 0) AS total_not_ok_count
             FROM 
                 required_checklists rc
             LEFT JOIN 
-                submitted_checklists sc ON 
-                    rc.machineid = sc.machineid 
-                    AND rc.frequency = sc.frequency
-                    AND rc.submission_date = sc.submission_date
-                    AND COALESCE(rc.shift, 'N/A') = COALESCE(sc.shift, 'N/A')
+                submitted_checklists sc 
+                ON rc.machineid = sc.machineid 
+                AND rc.frequency = sc.frequency
+                AND rc.submission_date = sc.submission_date
+                AND COALESCE(rc.shift, 'N/A') = COALESCE(sc.shift, 'N/A')
             LEFT JOIN 
-                not_ok_checklists nk ON 
-                    rc.machineid = nk.machineid 
-                    AND rc.frequency = nk.frequency
-                    AND rc.submission_date = nk.submission_date
-                    AND COALESCE(rc.shift, 'N/A') = COALESCE(nk.shift, 'N/A')
+                not_ok_checklists nk 
+                ON rc.machineid = nk.machineid 
+                AND rc.frequency = nk.frequency
+                AND rc.submission_date = nk.submission_date
+                AND COALESCE(rc.shift, 'N/A') = COALESCE(nk.shift, 'N/A')
             GROUP BY 
                 rc.machineid, rc.machinename, rc.frequency, rc.shift
             ORDER BY 
@@ -3297,6 +3459,7 @@ async function getDashboardCount(req, res) {
         client.release();
     }
 }
+
 
 
 async function getChecklistCountsForDate(req, res) {

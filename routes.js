@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('./auth/auth.js');
 const ad = require('./Admin/admin.js');
-const {authenticateUser} = require('./token/jwtUtils.js');
+const { authenticateUser } = require('./token/jwtUtils.js');
 /*-------------------Authentication----------------------------*/
 router.post('/register', auth.register);  //done
 router.post('/login', auth.login);  //done
