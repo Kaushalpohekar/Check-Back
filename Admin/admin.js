@@ -284,7 +284,7 @@ async function getAllMachineDetails(req, res) {
                 LEFT JOIN checklist.machine_images mi ON m.machineid = mi.machineid
                 LEFT JOIN checklist.qr_images qr ON m.machineid = qr.machineid
             WHERE 
-                m.organizationid = $1 and m.status = TRUE;
+                m.organizationid = $1;
         `;
 
         const result = await pool.query(query, [organizationId]);
