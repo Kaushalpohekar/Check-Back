@@ -1078,17 +1078,54 @@ async function getCheckpointsByMachine(req, res) {
     }
 }
 
-
 // async function getCheckpointsByMachineAndFrequency(req, res) {
 //     const { machineId, frequency } = req.params;
+//     const currentTime = new Date();
+//     let shift = null;
 
 //     try {
-//         // Ensure required parameters are provided
 //         if (!machineId || !frequency) {
-//             return res.status(400).json({ error: 'Machine ID and Frequency are required' });
+//             return res.status(400).json({ message: 'Machine ID and Frequency are required' });
 //         }
 
-//         const query = `
+//         const hours = currentTime.getHours();
+
+//         if (frequency === 'Daily') {
+//             if (hours >= 0.5 && hours < 8.5) {
+//                 shift = 'A';
+//             } else if (hours >= 8.5 && hours < 16.5) {
+//                 shift = 'B';
+//             } else {
+//                 shift = 'C';
+//             }
+//         }
+
+//         let submissionQuery = `
+//             SELECT 1 FROM checklist.checklist_submissions 
+//             WHERE machineid = $1 AND frequency = $2 
+//         `;
+//         const queryParams = [machineId, frequency];
+
+//         if (frequency === 'Daily') {
+//             submissionQuery += ` AND shift = $3 AND submission_date::date = CURRENT_DATE`;
+//             queryParams.push(shift);
+//         } else if (frequency === 'Weekly') {
+//             submissionQuery += ` AND date_part('week', submission_date) = date_part('week', CURRENT_DATE)
+//                                  AND date_part('year', submission_date) = date_part('year', CURRENT_DATE)`;
+//         } else if (frequency === 'Monthly') {
+//             submissionQuery += ` AND date_part('month', submission_date) = date_part('month', CURRENT_DATE)
+//                                  AND date_part('year', submission_date) = date_part('year', CURRENT_DATE)`;
+//         } else if (frequency === 'Yearly') {
+//             submissionQuery += ` AND date_part('year', submission_date) = date_part('year', CURRENT_DATE)`;
+//         }
+
+//         const submissionResult = await pool.query(submissionQuery, queryParams);
+
+//         if (submissionResult.rows.length > 0) {
+//             return res.status(400).json({ message: 'Checklist Already Filled!!' });
+//         }
+
+//         const checkpointQuery = `
 //             SELECT 
 //                 c.checkpointid, c.checkpointname, c.importantnote, c.frequency,
 //                 ci.imagename, ci.imagepath
@@ -1099,13 +1136,14 @@ async function getCheckpointsByMachine(req, res) {
 //                 c.machineid = $1 AND c.frequency = $2;
 //         `;
 
-//         const result = await pool.query(query, [machineId, frequency]);
+//         const checkpointResult = await pool.query(checkpointQuery, [machineId, frequency]);
 
-//         if (result.rows.length === 0) {
+//         if (checkpointResult.rows.length === 0) {
+//             //console.log('No checkpoints available for the specified machine and frequency');
 //             return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
 //         }
 
-//         const checkpoints = result.rows.map(row => {
+//         const checkpoints = checkpointResult.rows.map(row => {
 //             let checkpoint = {
 //                 checkpointid: row.checkpointid,
 //                 checkpointname: row.checkpointname,
@@ -1114,22 +1152,20 @@ async function getCheckpointsByMachine(req, res) {
 //                 checkpointImage: null
 //             };
 
-//             // Read checkpoint image and convert to base64 if available
 //             if (row.imagepath) {
 //                 try {
-//                     const fileBuffer = fs.readFileSync('.' + row.imagepath); // Use __dirname for relative paths
+//                     const fileBuffer = fs.readFileSync('.' + row.imagepath);
 //                     const base64File = fileBuffer.toString('base64');
 //                     const mimeType = mime.lookup(row.imagename);
 //                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
 //                 } catch (err) {
-//                     console.error('Error reading checkpoint image:', err);
-//                     checkpoint.checkpointImage = null; // Set to null if error occurs
+//                     //console.error('Error reading checkpoint image:', err);
+//                     checkpoint.checkpointImage = null;
 //                 }
 //             }
 
 //             return checkpoint;
 //         });
-
 //         res.status(200).json(checkpoints);
 //     } catch (err) {
 //         console.error('Error fetching checkpoints:', err);
@@ -1147,7 +1183,7 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
             return res.status(400).json({ message: 'Machine ID and Frequency are required' });
         }
 
-        const hours = currentTime.getHours();
+        const hours = currentTime.getHours() + currentTime.getMinutes() / 60;
 
         if (frequency === 'Daily') {
             if (hours >= 0.5 && hours < 8.5) {
@@ -1159,6 +1195,11 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
             }
         }
 
+        let submissionDateCondition = `submission_date::date = CURRENT_DATE`;
+        if (frequency === 'Daily' && shift === 'C' && hours < 0.5) {
+            submissionDateCondition = `submission_date::date = (CURRENT_DATE - INTERVAL '1 day')`;
+        }
+
         let submissionQuery = `
             SELECT 1 FROM checklist.checklist_submissions 
             WHERE machineid = $1 AND frequency = $2 
@@ -1166,7 +1207,7 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
         const queryParams = [machineId, frequency];
 
         if (frequency === 'Daily') {
-            submissionQuery += ` AND shift = $3 AND submission_date::date = CURRENT_DATE`;
+            submissionQuery += ` AND shift = $3 AND ${submissionDateCondition}`;
             queryParams.push(shift);
         } else if (frequency === 'Weekly') {
             submissionQuery += ` AND date_part('week', submission_date) = date_part('week', CURRENT_DATE)
@@ -1198,7 +1239,6 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
         const checkpointResult = await pool.query(checkpointQuery, [machineId, frequency]);
 
         if (checkpointResult.rows.length === 0) {
-            //console.log('No checkpoints available for the specified machine and frequency');
             return res.status(404).json({ error: 'No checkpoints available for the specified machine and frequency' });
         }
 
@@ -1218,23 +1258,19 @@ async function getCheckpointsByMachineAndFrequency(req, res) {
                     const mimeType = mime.lookup(row.imagename);
                     checkpoint.checkpointImage = `data:${mimeType || 'application/octet-stream'};base64,${base64File}`;
                 } catch (err) {
-                    //console.error('Error reading checkpoint image:', err);
                     checkpoint.checkpointImage = null;
                 }
             }
 
             return checkpoint;
         });
+
         res.status(200).json(checkpoints);
     } catch (err) {
         console.error('Error fetching checkpoints:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 }
-
-
-
-
 
 async function submission(req, res) {
     const {
